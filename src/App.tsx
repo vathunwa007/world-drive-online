@@ -107,7 +107,7 @@ export default function App() {
       let mode: SignalingMode;
 
       if (hasPieSocket) {
-        wsUrl = `wss://${PIESOCKET_CLUSTER_ID}.piesocket.com/v3/${encodeURIComponent(roomId)}?api_key=${PIESOCKET_API_KEY}&notify_self=1`;
+        wsUrl = `wss://${PIESOCKET_CLUSTER_ID}.piesocket.com/v3/${encodeURIComponent(roomId)}?api_key=${PIESOCKET_API_KEY}`;
         mode = 'piesocket';
       } else {
         const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
