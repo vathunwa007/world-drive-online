@@ -1,5 +1,8 @@
 import React, { useEffect, useState } from 'react';
-import { Users, RefreshCw, DoorOpen, Gamepad2 } from 'lucide-react';
+import { Users, RefreshCw, DoorOpen, Gamepad2, Wifi } from 'lucide-react';
+
+const PIESOCKET_API_KEY = import.meta.env.VITE_PIESOCKET_API_KEY || '';
+const PIESOCKET_CLUSTER_ID = import.meta.env.VITE_PIESOCKET_CLUSTER_ID || '';
 
 type RoomInfo = {
   id: string;
@@ -16,9 +19,12 @@ export function RoomLobby({ onJoinRoom }: RoomLobbyProps) {
   const [error, setError] = useState('');
 
   const isStaticHost = !window.location.hostname.includes('localhost') && !window.location.hostname.includes('127.0.0.1');
+  const hasPieSocket = !!(PIESOCKET_API_KEY && PIESOCKET_CLUSTER_ID);
+  // Can fetch room list only from self-hosted server (not PieSocket or plain static)
+  const canFetchRooms = !isStaticHost && !hasPieSocket;
 
   const fetchRooms = async () => {
-    if (isStaticHost) {
+    if (!canFetchRooms) {
       setLoading(false);
       return;
     }
@@ -38,12 +44,25 @@ export function RoomLobby({ onJoinRoom }: RoomLobbyProps) {
 
   useEffect(() => {
     fetchRooms();
-    if (isStaticHost) return;
+    if (!canFetchRooms) return;
     const interval = setInterval(fetchRooms, 5000);
     return () => clearInterval(interval);
   }, []);
 
   const totalPlayers = rooms.reduce((sum, r) => sum + r.playerCount, 0);
+
+  // PieSocket mode: show connection status instead of room list
+  if (hasPieSocket && isStaticHost) {
+    return (
+      <div className="w-full max-w-lg">
+        <div className="bg-emerald-500/10 border border-emerald-500/30 rounded-xl p-6 text-center">
+          <Wifi className="w-8 h-8 text-emerald-400 mx-auto mb-3" />
+          <p className="text-emerald-300 font-medium text-sm">Online Mode via PieSocket</p>
+          <p className="text-slate-400 text-xs mt-1">Enter a Room ID below to play with friends</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="w-full max-w-lg">
