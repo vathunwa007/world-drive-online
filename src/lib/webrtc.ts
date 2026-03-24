@@ -35,6 +35,9 @@ export class WebRTCManager {
   private messageQueue: Promise<void> = Promise.resolve();
   // Buffer signals that arrive before the peer connection is ready
   private pendingSignals: Map<string, any[]> = new Map();
+  // Lobby channel for room discovery (PieSocket mode)
+  private lobbyWs: WebSocket | null = null;
+  private lobbyInterval: ReturnType<typeof setInterval> | null = null;
 
   public onPeerJoined?: (peerId: string) => void;
   public onPeerLeft?: (peerId: string) => void;
@@ -42,7 +45,7 @@ export class WebRTCManager {
   public onChatMessage?: (msg: ChatMessage) => void;
   public onConnected?: () => void;
 
-  constructor(signalingUrl: string, mode: SignalingMode = 'self-hosted') {
+  constructor(signalingUrl: string, mode: SignalingMode = 'self-hosted', private pieSocketBase?: string) {
     this.signalingUrl = signalingUrl;
     this.mode = mode;
   }
@@ -99,6 +102,7 @@ export class WebRTCManager {
 
   private connectPieSocket(roomId: string) {
     this.ws = new WebSocket(this.signalingUrl);
+    this.connectLobby(roomId);
 
     this.ws.onopen = () => {
       // Announce ourselves to the channel
@@ -235,10 +239,68 @@ export class WebRTCManager {
     }
   }
 
+  private connectLobby(roomId: string) {
+    if (!this.pieSocketBase) return;
+
+    const lobbyUrl = this.pieSocketBase!.replace('%CHANNEL%', '__lobby__');
+    this.lobbyWs = new WebSocket(lobbyUrl);
+
+    const announceToLobby = () => {
+      if (this.lobbyWs && this.lobbyWs.readyState === WebSocket.OPEN) {
+        this.lobbyWs.send(JSON.stringify({
+          type: 'lobby-room-announce',
+          playerId: this.myId,
+          roomId,
+        }));
+      }
+    };
+
+    this.lobbyWs.onopen = () => {
+      announceToLobby();
+      // Re-announce periodically so the lobby stays up to date
+      this.lobbyInterval = setInterval(announceToLobby, 5000);
+    };
+
+    // Respond to lobby-ping from the lobby UI
+    this.lobbyWs.onmessage = (event) => {
+      let data: any;
+      try {
+        data = JSON.parse(event.data);
+      } catch { return; }
+      if (data.event === 'system' || data.sender === 'system') return;
+      if (data.event && data.data) {
+        try { data = typeof data.data === 'string' ? JSON.parse(data.data) : data.data; } catch { return; }
+      }
+      if (data.type === 'lobby-ping') {
+        announceToLobby();
+      }
+    };
+  }
+
+  private disconnectLobby() {
+    if (this.lobbyInterval) {
+      clearInterval(this.lobbyInterval);
+      this.lobbyInterval = null;
+    }
+    if (this.lobbyWs) {
+      // Notify lobby that we left
+      if (this.lobbyWs.readyState === WebSocket.OPEN) {
+        this.lobbyWs.send(JSON.stringify({
+          type: 'lobby-player-left',
+          playerId: this.myId,
+        }));
+      }
+      this.lobbyWs.close();
+      this.lobbyWs = null;
+    }
+  }
+
   public disconnect() {
     if (this.mode === 'piesocket' && this.myId) {
       this.broadcast({ type: 'peer-left', senderId: this.myId });
     }
+
+    this.disconnectLobby();
 
     if (this.heartbeatInterval) {
       clearInterval(this.heartbeatInterval);

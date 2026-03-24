@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import { Users, RefreshCw, DoorOpen, Gamepad2, Wifi } from 'lucide-react';
 
 const PIESOCKET_API_KEY = import.meta.env.VITE_PIESOCKET_API_KEY || '';
@@ -13,6 +13,10 @@ type RoomLobbyProps = {
   onJoinRoom: (roomId: string) => void;
 };
 
+const LOBBY_CHANNEL = '__lobby__';
+// If a player hasn't sent a heartbeat in this long, consider them gone
+const PLAYER_TIMEOUT_MS = 12000;
+
 export function RoomLobby({ onJoinRoom }: RoomLobbyProps) {
   const [rooms, setRooms] = useState<RoomInfo[]>([]);
   const [loading, setLoading] = useState(true);
@@ -20,11 +24,96 @@ export function RoomLobby({ onJoinRoom }: RoomLobbyProps) {
 
   const isStaticHost = !window.location.hostname.includes('localhost') && !window.location.hostname.includes('127.0.0.1');
   const hasPieSocket = !!(PIESOCKET_API_KEY && PIESOCKET_CLUSTER_ID);
-  // Can fetch room list only from self-hosted server (not PieSocket or plain static)
-  const canFetchRooms = !isStaticHost && !hasPieSocket;
 
+  // Track individual players: { playerId: { roomId, lastSeen } }
+  const playersRef = useRef<Map<string, { roomId: string; lastSeen: number }>>(new Map());
+  const lobbyWsRef = useRef<WebSocket | null>(null);
+
+  // Aggregate players into rooms
+  const aggregateRooms = () => {
+    const now = Date.now();
+    const roomMap = new Map<string, number>();
+
+    for (const [playerId, info] of playersRef.current) {
+      if (now - info.lastSeen > PLAYER_TIMEOUT_MS) {
+        playersRef.current.delete(playerId);
+        continue;
+      }
+      roomMap.set(info.roomId, (roomMap.get(info.roomId) || 0) + 1);
+    }
+
+    const result: RoomInfo[] = Array.from(roomMap.entries())
+      .map(([id, playerCount]) => ({ id, playerCount }))
+      .sort((a, b) => b.playerCount - a.playerCount);
+
+    setRooms(result);
+    setLoading(false);
+  };
+
+  // PieSocket lobby: connect to the __lobby__ channel to discover rooms
+  useEffect(() => {
+    if (!hasPieSocket) return;
+
+    const wsUrl = `wss://${PIESOCKET_CLUSTER_ID}.piesocket.com/v3/${encodeURIComponent(LOBBY_CHANNEL)}?api_key=${PIESOCKET_API_KEY}`;
+    const ws = new WebSocket(wsUrl);
+    lobbyWsRef.current = ws;
+
+    ws.onopen = () => {
+      setLoading(false);
+      // Ask everyone who's online to announce themselves
+      ws.send(JSON.stringify({ type: 'lobby-ping' }));
+    };
+
+    ws.onmessage = (event) => {
+      let data: any;
+      try {
+        data = JSON.parse(event.data);
+      } catch {
+        return;
+      }
+
+      // Skip PieSocket system messages
+      if (data.event === 'system' || data.sender === 'system') return;
+      if (data.event && data.data) {
+        try {
+          data = typeof data.data === 'string' ? JSON.parse(data.data) : data.data;
+        } catch {
+          return;
+        }
+      }
+
+      if (data.type === 'lobby-room-announce' && data.playerId && data.roomId) {
+        playersRef.current.set(data.playerId, {
+          roomId: data.roomId,
+          lastSeen: Date.now(),
+        });
+        aggregateRooms();
+      }
+
+      if (data.type === 'lobby-player-left' && data.playerId) {
+        playersRef.current.delete(data.playerId);
+        aggregateRooms();
+      }
+    };
+
+    ws.onerror = () => {
+      setError('Could not connect to lobby');
+      setLoading(false);
+    };
+
+    // Periodically clean up stale players
+    const cleanupInterval = setInterval(aggregateRooms, 5000);
+
+    return () => {
+      clearInterval(cleanupInterval);
+      ws.close();
+      lobbyWsRef.current = null;
+    };
+  }, []);
+
+  // Self-hosted mode: fetch /api/rooms
   const fetchRooms = async () => {
-    if (!canFetchRooms) {
+    if (isStaticHost || hasPieSocket) {
       setLoading(false);
       return;
     }
@@ -43,47 +132,45 @@ export function RoomLobby({ onJoinRoom }: RoomLobbyProps) {
   };
 
   useEffect(() => {
+    if (hasPieSocket || isStaticHost) return;
     fetchRooms();
-    if (!canFetchRooms) return;
     const interval = setInterval(fetchRooms, 5000);
     return () => clearInterval(interval);
   }, []);
 
   const totalPlayers = rooms.reduce((sum, r) => sum + r.playerCount, 0);
 
-  // PieSocket mode: show connection status instead of room list
-  if (hasPieSocket && isStaticHost) {
-    return (
-      <div className="w-full max-w-lg">
-        <div className="bg-emerald-500/10 border border-emerald-500/30 rounded-xl p-6 text-center">
-          <Wifi className="w-8 h-8 text-emerald-400 mx-auto mb-3" />
-          <p className="text-emerald-300 font-medium text-sm">Online Mode via PieSocket</p>
-          <p className="text-slate-400 text-xs mt-1">Enter a Room ID below to play with friends</p>
-        </div>
-      </div>
-    );
-  }
-
   return (
     <div className="w-full max-w-lg">
       <div className="flex items-center justify-between mb-4">
         <h2 className="text-xl font-bold text-white flex items-center gap-2">
-          <Gamepad2 className="w-5 h-5 text-blue-400" />
+          {hasPieSocket ? (
+            <Wifi className="w-5 h-5 text-emerald-400" />
+          ) : (
+            <Gamepad2 className="w-5 h-5 text-blue-400" />
+          )}
           Active Rooms
         </h2>
         <div className="flex items-center gap-3">
+          {hasPieSocket && (
+            <span className="text-xs bg-emerald-500/20 text-emerald-400 px-2 py-0.5 rounded-full">
+              Online
+            </span>
+          )}
           <span className="text-sm text-slate-400 flex items-center gap-1">
             <Users className="w-4 h-4" />
             {totalPlayers} online
           </span>
-          <button
-            onClick={fetchRooms}
-            disabled={loading}
-            className="text-slate-400 hover:text-white transition-colors disabled:opacity-50"
-            title="Refresh"
-          >
-            <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
-          </button>
+          {!hasPieSocket && (
+            <button
+              onClick={fetchRooms}
+              disabled={loading}
+              className="text-slate-400 hover:text-white transition-colors disabled:opacity-50"
+              title="Refresh"
+            >
+              <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
+            </button>
+          )}
         </div>
       </div>
 

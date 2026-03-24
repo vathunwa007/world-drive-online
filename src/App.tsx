@@ -106,8 +106,11 @@ export default function App() {
       let wsUrl: string;
       let mode: SignalingMode;
 
+      let pieSocketBase: string | undefined;
+
       if (hasPieSocket) {
-        wsUrl = `wss://${PIESOCKET_CLUSTER_ID}.piesocket.com/v3/${encodeURIComponent(roomId)}?api_key=${PIESOCKET_API_KEY}`;
+        pieSocketBase = `wss://${PIESOCKET_CLUSTER_ID}.piesocket.com/v3/%CHANNEL%?api_key=${PIESOCKET_API_KEY}`;
+        wsUrl = pieSocketBase.replace('%CHANNEL%', encodeURIComponent(roomId));
         mode = 'piesocket';
       } else {
         const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
@@ -115,7 +118,7 @@ export default function App() {
         mode = 'self-hosted';
       }
 
-      const webrtc = new WebRTCManager(wsUrl, mode);
+      const webrtc = new WebRTCManager(wsUrl, mode, pieSocketBase);
       webrtcRef.current = webrtc;
 
       webrtc.onPeerData = (peerId, data) => {
