@@ -67,52 +67,50 @@ export class RoadDetector {
   /**
    * Determine if an RGB color looks like a road on Google Maps.
    *
-   * Key distinction:
-   * - Roads are NEUTRAL (R ≈ B, cool/gray tone) — pure white, gray, or blue-gray
-   * - Ground/terrain is WARM (R > B, slight beige/cream tint) — even if very bright
+   * Road colors are cool/neutral tones (blue-gray) across all brightness levels:
+   * - Bright roads: ~(230,235,240) white/light gray, neutral (B >= R)
+   * - Mid roads: ~(170,180,195) blue-gray
+   * - Dark roads: ~(55,62,78) dark slate/blue-gray
    *
-   * Road colors:
-   * - White/gray roads: R≈G≈B, bright, neutral (R-B < 8)
-   * - Blue-gray roads: ~170,180,195 range (B >= R)
-   * - Yellow/orange highways: distinct warm but saturated
-   *
-   * Off-road colors:
-   * - Bare ground/terrain: very light but warm tint (R-B > 8)
-   * - Green parks/grass: G >> R, G >> B
-   * - Blue water: B >> R
+   * Off-road colors are warm-tinted or strongly colored:
+   * - Ground/terrain: warm beige/cream (R > B noticeably)
+   * - Parks/grass: green dominant
+   * - Water: strong blue dominant
+   * - Buildings: various warm/saturated colors
    */
   private isRoadColor(r: number, g: number, b: number): boolean {
     const brightness = (r + g + b) / 3;
     const maxC = Math.max(r, g, b);
     const minC = Math.min(r, g, b);
-    const colorSpread = maxC - minC; // How far apart the channels are
+    const colorSpread = maxC - minC;
 
     // --- Reject off-road first ---
 
     // Green areas (parks/grass)
     if (g > r + 15 && g > b + 15) return false;
 
-    // Blue water
-    if (b > r + 25 && b > g + 10 && brightness < 180) return false;
+    // Strong blue water (very saturated blue)
+    if (b > r + 30 && b > g + 20) return false;
 
-    // Bare ground / terrain: bright but has warm tint (R > B noticeably)
-    // This is the key rule — ground on Google Maps is warm-white (#F5F2ED style)
-    // while roads are neutral-white (#FFFFFF / #F0F0F0 style)
-    if (brightness > 180 && r - b > 8 && colorSpread < 30) return false;
+    // Warm-tinted ground/terrain (R > B noticeably, not saturated enough for highways)
+    if (r - b > 10 && colorSpread < 40) return false;
+
+    // Very dark areas that aren't blue-gray (e.g. dark brown, dark green)
+    if (brightness < 30) return false;
 
     // --- Match road colors ---
 
-    // Pure white/neutral gray roads: bright, channels very close together
-    if (brightness > 180 && colorSpread < 10) return true;
+    // Core rule: roads on Google Maps are cool/neutral (B >= R or very close)
+    // This covers the full brightness range from dark slate to bright white
 
-    // Blue-gray roads (common vector map style, B >= R)
-    if (brightness > 150 && colorSpread < 30 && b >= r && minC > 130) return true;
+    // Blue-gray roads: B >= R, low-to-moderate spread — covers dark to bright
+    if (b >= r && colorSpread < 35) return true;
 
-    // Yellow/orange highways (distinctly saturated warm)
+    // Pure neutral gray/white: channels very close, any brightness
+    if (colorSpread < 10) return true;
+
+    // Yellow/orange highways (distinctly saturated warm — exception to warm rejection)
     if (r > 200 && g > 170 && b < 150 && brightness > 170) return true;
-
-    // Mid-tone neutral gray (sidewalks, parking lots)
-    if (brightness > 120 && colorSpread < 12 && minC > 100) return true;
 
     return false;
   }

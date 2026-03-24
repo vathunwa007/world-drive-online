@@ -39,22 +39,22 @@ export const Speedometer: React.FC<SpeedometerProps> = ({ car }) => {
     const rad = (angle - 90) * (Math.PI / 180);
     const isMajor = i % 40 === 0;
     const isRedZone = i >= 200;
-    
+
     const r1 = 85;
     const r2 = isMajor ? 73 : 79;
     const x1 = 100 + r1 * Math.cos(rad);
     const y1 = 100 + r1 * Math.sin(rad);
     const x2 = 100 + r2 * Math.cos(rad);
     const y2 = 100 + r2 * Math.sin(rad);
-    
+
     const strokeColor = isRedZone ? "#ef4444" : (isMajor ? "white" : "#94a3b8");
-    
+
     ticks.push(
-      <line 
-        key={`line-${i}`} 
-        x1={x1} y1={y1} x2={x2} y2={y2} 
-        stroke={strokeColor} 
-        strokeWidth={isMajor ? 3 : 1.5} 
+      <line
+        key={`line-${i}`}
+        x1={x1} y1={y1} x2={x2} y2={y2}
+        stroke={strokeColor}
+        strokeWidth={isMajor ? 3 : 1.5}
         strokeLinecap="round"
       />
     );
@@ -63,14 +63,14 @@ export const Speedometer: React.FC<SpeedometerProps> = ({ car }) => {
       const tx = 100 + 56 * Math.cos(rad);
       const ty = 100 + 56 * Math.sin(rad);
       ticks.push(
-        <text 
-          key={`text-${i}`} 
-          x={tx} y={ty} 
-          fill={isRedZone ? "#ef4444" : "white"} 
-          fontSize="12" 
-          textAnchor="middle" 
-          alignmentBaseline="middle" 
-          fontFamily="monospace" 
+        <text
+          key={`text-${i}`}
+          x={tx} y={ty}
+          fill={isRedZone ? "#ef4444" : "white"}
+          fontSize="12"
+          textAnchor="middle"
+          alignmentBaseline="middle"
+          fontFamily="monospace"
           fontWeight="bold"
         >
           {i}
@@ -80,10 +80,10 @@ export const Speedometer: React.FC<SpeedometerProps> = ({ car }) => {
   }
 
   return (
-    <div className="absolute bottom-6 right-6 w-56 h-56 bg-slate-900/90 backdrop-blur-md rounded-full border-[6px] border-slate-800 shadow-[0_0_30px_rgba(0,0,0,0.5)] flex items-center justify-center overflow-hidden z-10">
+    <div className="absolute bottom-6 right-30 w-56 h-56 bg-slate-900/90 backdrop-blur-md rounded-full border-[6px] border-slate-800 shadow-[0_0_30px_rgba(0,0,0,0.5)] flex items-center justify-center overflow-hidden z-10">
       {/* Inner glow */}
       <div className="absolute inset-0 rounded-full shadow-[inset_0_0_20px_rgba(59,130,246,0.15)] pointer-events-none"></div>
-      
+
       <svg viewBox="0 0 200 200" className="w-full h-full drop-shadow-xl">
         {/* Background gradient */}
         <defs>
@@ -93,30 +93,30 @@ export const Speedometer: React.FC<SpeedometerProps> = ({ car }) => {
           </radialGradient>
         </defs>
         <circle cx="100" cy="100" r="95" fill="url(#dialGradient)" />
-        
+
         {/* Ticks */}
         {ticks}
 
         {/* Digital Speed */}
-        <text 
-          ref={textRef} 
-          x="100" y="145" 
-          fill="white" 
-          fontSize="36" 
-          fontWeight="900" 
-          textAnchor="middle" 
-          fontFamily="monospace" 
+        <text
+          ref={textRef}
+          x="100" y="145"
+          fill="white"
+          fontSize="36"
+          fontWeight="900"
+          textAnchor="middle"
+          fontFamily="monospace"
           style={{ fontVariantNumeric: 'tabular-nums' }}
         >
           0
         </text>
-        <text 
-          x="100" y="165" 
-          fill="#94a3b8" 
-          fontSize="12" 
-          fontWeight="bold" 
-          textAnchor="middle" 
-          fontFamily="sans-serif" 
+        <text
+          x="100" y="165"
+          fill="#94a3b8"
+          fontSize="12"
+          fontWeight="bold"
+          textAnchor="middle"
+          fontFamily="sans-serif"
           letterSpacing="1"
         >
           KM/H
