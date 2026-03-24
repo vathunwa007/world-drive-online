@@ -22,6 +22,12 @@ export type ChatMessage = {
 
 export type SignalingMode = 'self-hosted' | 'piesocket';
 
+export type TurnConfig = {
+  urls: string;
+  username: string;
+  credential: string;
+};
+
 export class WebRTCManager {
   private ws: WebSocket | null = null;
   private peers: Map<string, RTCPeerConnection> = new Map();
@@ -38,6 +44,8 @@ export class WebRTCManager {
   // Lobby channel for room discovery (PieSocket mode)
   private lobbyWs: WebSocket | null = null;
   private lobbyInterval: ReturnType<typeof setInterval> | null = null;
+  // Custom TURN server configs
+  private turnServers: TurnConfig[];
 
   public onPeerJoined?: (peerId: string) => void;
   public onPeerLeft?: (peerId: string) => void;
@@ -45,9 +53,10 @@ export class WebRTCManager {
   public onChatMessage?: (msg: ChatMessage) => void;
   public onConnected?: () => void;
 
-  constructor(signalingUrl: string, mode: SignalingMode = 'self-hosted', private pieSocketBase?: string) {
+  constructor(signalingUrl: string, mode: SignalingMode = 'self-hosted', private pieSocketBase?: string, turnServers?: TurnConfig[]) {
     this.signalingUrl = signalingUrl;
     this.mode = mode;
+    this.turnServers = turnServers || [];
   }
 
   public connect(roomId: string) {
@@ -318,27 +327,18 @@ export class WebRTCManager {
   }
 
   private async createPeerConnection(peerId: string, isInitiator: boolean) {
-    const pc = new RTCPeerConnection({
-      iceServers: [
-        { urls: 'stun:stun.l.google.com:19302' },
-        { urls: 'stun:stun1.l.google.com:19302' },
-        {
-          urls: 'turn:openrelay.metered.ca:80',
-          username: 'openrelayproject',
-          credential: 'openrelayproject',
-        },
-        {
-          urls: 'turn:openrelay.metered.ca:443',
-          username: 'openrelayproject',
-          credential: 'openrelayproject',
-        },
-        {
-          urls: 'turn:openrelay.metered.ca:443?transport=tcp',
-          username: 'openrelayproject',
-          credential: 'openrelayproject',
-        },
-      ]
-    });
+    const iceServers: RTCIceServer[] = [
+      { urls: 'stun:stun.l.google.com:19302' },
+      { urls: 'stun:stun1.l.google.com:19302' },
+      ...this.turnServers.map(t => ({
+        urls: t.urls,
+        username: t.username,
+        credential: t.credential,
+      })),
+    ];
+    console.log('[WebRTC] ICE servers:', iceServers.map(s => s.urls));
+
+    const pc = new RTCPeerConnection({ iceServers });
 
     this.peers.set(peerId, pc);
 
@@ -348,7 +348,12 @@ export class WebRTCManager {
       }
     };
 
+    pc.oniceconnectionstatechange = () => {
+      console.log(`[WebRTC] ICE state with ${peerId}: ${pc.iceConnectionState}`);
+    };
+
     pc.onconnectionstatechange = () => {
+      console.log(`[WebRTC] Connection state with ${peerId}: ${pc.connectionState}`);
       if (pc.connectionState === 'failed' || pc.connectionState === 'disconnected') {
         this.removePeer(peerId);
         if (this.onPeerLeft) this.onPeerLeft(peerId);
@@ -372,12 +377,29 @@ export class WebRTCManager {
   private setupDataChannel(peerId: string, dc: RTCDataChannel) {
     this.dataChannels.set(peerId, dc);
 
+    dc.onopen = () => {
+      console.log(`[WebRTC] Data channel OPEN with peer ${peerId}`);
+    };
+
+    dc.onclose = () => {
+      console.log(`[WebRTC] Data channel CLOSED with peer ${peerId}`);
+      this.dataChannels.delete(peerId);
+    };
+
+    dc.onerror = (event) => {
+      console.error(`[WebRTC] Data channel ERROR with peer ${peerId}:`, event);
+    };
+
     dc.onmessage = (event) => {
-      const data = JSON.parse(event.data);
-      if (data.type === 'sync' && this.onPeerData) {
-        this.onPeerData(peerId, data.payload);
-      } else if (data.type === 'chat' && this.onChatMessage) {
-        this.onChatMessage(data.payload);
+      try {
+        const data = JSON.parse(event.data);
+        if (data.type === 'sync' && this.onPeerData) {
+          this.onPeerData(peerId, data.payload);
+        } else if (data.type === 'chat' && this.onChatMessage) {
+          this.onChatMessage(data.payload);
+        }
+      } catch (e) {
+        console.warn(`[WebRTC] Failed to parse message from ${peerId}:`, e);
       }
     };
   }

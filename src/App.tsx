@@ -2,7 +2,7 @@ import React, { useEffect, useRef, useState } from "react";
 import { Map3D } from "./components/Map3D";
 import { Speedometer } from "./components/Speedometer";
 import { CarPhysics } from "./lib/physics";
-import { WebRTCManager, PeerData, ChatMessage, SignalingMode } from "./lib/webrtc";
+import { WebRTCManager, PeerData, ChatMessage, SignalingMode, TurnConfig } from "./lib/webrtc";
 import { RoomLobby } from "./components/RoomLobby";
 import { Car, Users, MessageSquare, Send, Check } from "lucide-react";
 
@@ -10,6 +10,9 @@ const GOOGLE_MAPS_API_KEY = import.meta.env.VITE_GOOGLE_MAPS_API_KEY || "";
 const GOOGLE_MAPS_MAP_ID = import.meta.env.VITE_GOOGLE_MAPS_MAP_ID || "";
 const PIESOCKET_API_KEY = import.meta.env.VITE_PIESOCKET_API_KEY || "";
 const PIESOCKET_CLUSTER_ID = import.meta.env.VITE_PIESOCKET_CLUSTER_ID || "";
+const TURN_URL = import.meta.env.VITE_TURN_URL || "";
+const TURN_USERNAME = import.meta.env.VITE_TURN_USERNAME || "";
+const TURN_CREDENTIAL = import.meta.env.VITE_TURN_CREDENTIAL || "";
 
 // Default starting location (Bangkok, Thailand)
 const START_LAT = 13.7563;
@@ -119,7 +122,21 @@ export default function App() {
         mode = 'self-hosted';
       }
 
-      const webrtc = new WebRTCManager(wsUrl, mode, pieSocketBase);
+      // Build TURN server list from env vars
+      const turnServers: TurnConfig[] = [];
+      if (TURN_URL) {
+        // Support multiple URLs separated by comma
+        const urls = TURN_URL.split(',').map((u: string) => u.trim());
+        for (const url of urls) {
+          turnServers.push({
+            urls: url,
+            username: TURN_USERNAME,
+            credential: TURN_CREDENTIAL,
+          });
+        }
+      }
+
+      const webrtc = new WebRTCManager(wsUrl, mode, pieSocketBase, turnServers);
       webrtcRef.current = webrtc;
 
       webrtc.onPeerData = (peerId, data) => {
