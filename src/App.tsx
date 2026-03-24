@@ -87,6 +87,8 @@ export default function App() {
     };
   }, []);
 
+  const isStaticHost = !window.location.hostname.includes('localhost') && !window.location.hostname.includes('127.0.0.1');
+
   const startGame = () => {
     if (!apiKey || !roomId) {
       setError("Please fill in all required fields.");
@@ -94,34 +96,36 @@ export default function App() {
     }
     setError("");
 
-    // Initialize WebRTC
-    const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
-    const wsUrl = `${protocol}//${window.location.host}`;
+    // Initialize WebRTC (skip on static hosts like GitHub Pages)
+    if (!isStaticHost) {
+      const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
+      const wsUrl = `${protocol}//${window.location.host}`;
 
-    const webrtc = new WebRTCManager(wsUrl);
-    webrtcRef.current = webrtc;
+      const webrtc = new WebRTCManager(wsUrl);
+      webrtcRef.current = webrtc;
 
-    webrtc.onPeerData = (peerId, data) => {
-      peersRef.current.set(peerId, data);
-    };
+      webrtc.onPeerData = (peerId, data) => {
+        peersRef.current.set(peerId, data);
+      };
 
-    webrtc.onPeerLeft = (peerId) => {
-      peersRef.current.delete(peerId);
-      setPeerCount(peersRef.current.size);
-    };
+      webrtc.onPeerLeft = (peerId) => {
+        peersRef.current.delete(peerId);
+        setPeerCount(peersRef.current.size);
+      };
 
-    webrtc.onPeerJoined = (peerId) => {
-      setPeerCount(peersRef.current.size + 1);
-    };
+      webrtc.onPeerJoined = (peerId) => {
+        setPeerCount(peersRef.current.size + 1);
+      };
 
-    webrtc.onChatMessage = (msg) => {
-      setChatMessages((prev) => [...prev.slice(-49), msg]);
-      if (!showChatRef.current) {
-        setUnreadCount((prev) => prev + 1);
-      }
-    };
+      webrtc.onChatMessage = (msg) => {
+        setChatMessages((prev) => [...prev.slice(-49), msg]);
+        if (!showChatRef.current) {
+          setUnreadCount((prev) => prev + 1);
+        }
+      };
 
-    webrtc.connect(roomId);
+      webrtc.connect(roomId);
+    }
     setInGame(true);
 
     // Initialize Audio

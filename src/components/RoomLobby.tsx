@@ -15,7 +15,13 @@ export function RoomLobby({ onJoinRoom }: RoomLobbyProps) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
+  const isStaticHost = !window.location.hostname.includes('localhost') && !window.location.hostname.includes('127.0.0.1');
+
   const fetchRooms = async () => {
+    if (isStaticHost) {
+      setLoading(false);
+      return;
+    }
     setLoading(true);
     setError('');
     try {
@@ -32,6 +38,7 @@ export function RoomLobby({ onJoinRoom }: RoomLobbyProps) {
 
   useEffect(() => {
     fetchRooms();
+    if (isStaticHost) return;
     const interval = setInterval(fetchRooms, 5000);
     return () => clearInterval(interval);
   }, []);
