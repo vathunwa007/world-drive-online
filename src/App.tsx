@@ -1,93 +1,103 @@
-import React, { useEffect, useRef, useState } from 'react';
-import { Map3D } from './components/Map3D';
-import { Speedometer } from './components/Speedometer';
-import { CarPhysics } from './lib/physics';
-import { WebRTCManager, PeerData, ChatMessage } from './lib/webrtc';
-import { RoomLobby } from './components/RoomLobby';
-import { Car, Users, MessageSquare, Send, Check } from 'lucide-react';
+import React, { useEffect, useRef, useState } from "react";
+import { Map3D } from "./components/Map3D";
+import { Speedometer } from "./components/Speedometer";
+import { CarPhysics } from "./lib/physics";
+import { WebRTCManager, PeerData, ChatMessage } from "./lib/webrtc";
+import { RoomLobby } from "./components/RoomLobby";
+import { Car, Users, MessageSquare, Send, Check } from "lucide-react";
 
-const GOOGLE_MAPS_API_KEY = import.meta.env.VITE_GOOGLE_MAPS_API_KEY || '';
-const GOOGLE_MAPS_MAP_ID = import.meta.env.VITE_GOOGLE_MAPS_MAP_ID || '';
+const GOOGLE_MAPS_API_KEY = import.meta.env.VITE_GOOGLE_MAPS_API_KEY || "";
+const GOOGLE_MAPS_MAP_ID = import.meta.env.VITE_GOOGLE_MAPS_MAP_ID || "";
 
 // Default starting location (Bangkok, Thailand)
 const START_LAT = 13.7563;
 const START_LNG = 100.5018;
 
 const CAR_MODELS = [
-  { id: 'sports', name: 'Sports Car' },
-  { id: 'suv', name: 'SUV' },
-  { id: 'truck', name: 'Truck' },
-  { id: 'compact', name: 'Compact' },
+  { id: "sports", name: "Sports Car" },
+  { id: "suv", name: "SUV" },
+  { id: "truck", name: "Truck" },
+  { id: "compact", name: "Compact" },
 ];
 
 const CAR_COLORS = [
-  { id: '#ef4444', name: 'Red' },
-  { id: '#3b82f6', name: 'Blue' },
-  { id: '#eab308', name: 'Yellow' },
-  { id: '#22c55e', name: 'Green' },
-  { id: '#a855f7', name: 'Purple' },
-  { id: '#f97316', name: 'Orange' },
-  { id: '#ffffff', name: 'White' },
-  { id: '#1f2937', name: 'Black' },
+  { id: "#ef4444", name: "Red" },
+  { id: "#3b82f6", name: "Blue" },
+  { id: "#eab308", name: "Yellow" },
+  { id: "#22c55e", name: "Green" },
+  { id: "#a855f7", name: "Purple" },
+  { id: "#f97316", name: "Orange" },
+  { id: "#ffffff", name: "White" },
+  { id: "#1f2937", name: "Black" },
 ];
 
 export default function App() {
   const [inGame, setInGame] = useState(false);
-  const [roomId, setRoomId] = useState('');
+  const [roomId, setRoomId] = useState("");
   const [apiKey, setApiKey] = useState(GOOGLE_MAPS_API_KEY);
-  const [mapId, setMapId] = useState(GOOGLE_MAPS_MAP_ID || 'DEMO_MAP_ID');
-  const [error, setError] = useState('');
+  const [mapId, setMapId] = useState(GOOGLE_MAPS_MAP_ID || "DEMO_MAP_ID");
+  const [error, setError] = useState("");
 
   const [myCar] = useState(() => new CarPhysics(START_LAT, START_LNG, 0));
   const peersRef = useRef<Map<string, PeerData>>(new Map());
   const [peerCount, setPeerCount] = useState(0); // Only update state when peer joins/leaves
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
-  const [chatInput, setChatInput] = useState('');
+  const [chatInput, setChatInput] = useState("");
   const [showChat, setShowChat] = useState(false);
   const showChatRef = useRef(false);
   const [unreadCount, setUnreadCount] = useState(0);
   const [selectedCarType, setSelectedCarType] = useState(CAR_MODELS[0].id);
   const [selectedCarColor, setSelectedCarColor] = useState(CAR_COLORS[0].id);
-  const [playerName, setPlayerName] = useState('Player' + Math.floor(Math.random() * 1000));
+  const [playerName, setPlayerName] = useState(
+    "Player" + Math.floor(Math.random() * 1000),
+  );
 
   const webrtcRef = useRef<WebRTCManager | null>(null);
   const keysRef = useRef<{ [key: string]: boolean }>({});
   const animationFrameRef = useRef<number>(0);
-  
+
   const audioCtxRef = useRef<AudioContext | null>(null);
   const engineOscRef = useRef<OscillatorNode | null>(null);
   const engineGainRef = useRef<GainNode | null>(null);
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
+      if (
+        e.target instanceof HTMLInputElement ||
+        e.target instanceof HTMLTextAreaElement
+      )
+        return;
       keysRef.current[e.key] = true;
     };
     const handleKeyUp = (e: KeyboardEvent) => {
-      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
+      if (
+        e.target instanceof HTMLInputElement ||
+        e.target instanceof HTMLTextAreaElement
+      )
+        return;
       keysRef.current[e.key] = false;
     };
 
-    window.addEventListener('keydown', handleKeyDown);
-    window.addEventListener('keyup', handleKeyUp);
+    window.addEventListener("keydown", handleKeyDown);
+    window.addEventListener("keyup", handleKeyUp);
 
     return () => {
-      window.removeEventListener('keydown', handleKeyDown);
-      window.removeEventListener('keyup', handleKeyUp);
+      window.removeEventListener("keydown", handleKeyDown);
+      window.removeEventListener("keyup", handleKeyUp);
     };
   }, []);
 
   const startGame = () => {
     if (!apiKey || !roomId) {
-      setError('Please fill in all required fields.');
+      setError("Please fill in all required fields.");
       return;
     }
-    setError('');
+    setError("");
 
     // Initialize WebRTC
-    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+    const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
     const wsUrl = `${protocol}//${window.location.host}`;
-    
+
     const webrtc = new WebRTCManager(wsUrl);
     webrtcRef.current = webrtc;
 
@@ -105,9 +115,9 @@ export default function App() {
     };
 
     webrtc.onChatMessage = (msg) => {
-      setChatMessages(prev => [...prev.slice(-49), msg]);
+      setChatMessages((prev) => [...prev.slice(-49), msg]);
       if (!showChatRef.current) {
-        setUnreadCount(prev => prev + 1);
+        setUnreadCount((prev) => prev + 1);
       }
     };
 
@@ -116,16 +126,17 @@ export default function App() {
 
     // Initialize Audio
     try {
-      const AudioContext = window.AudioContext || (window as any).webkitAudioContext;
+      const AudioContext =
+        window.AudioContext || (window as any).webkitAudioContext;
       const audioCtx = new AudioContext();
       audioCtxRef.current = audioCtx;
 
       const osc = audioCtx.createOscillator();
-      osc.type = 'sawtooth';
+      osc.type = "sawtooth";
       osc.frequency.value = 50; // Base idle frequency
 
       const filter = audioCtx.createBiquadFilter();
-      filter.type = 'lowpass';
+      filter.type = "lowpass";
       filter.frequency.value = 400;
 
       const gainNode = audioCtx.createGain();
@@ -145,25 +156,44 @@ export default function App() {
     let lastBroadcast = 0;
     const loop = (time: number) => {
       myCar.update(keysRef.current);
-      
-      // Update engine sound
-      if (engineOscRef.current && engineGainRef.current && audioCtxRef.current) {
-        const speedKmh = Math.abs(myCar.speed * 24000000);
-        const targetPitch = 50 + speedKmh * 1.5; 
-        engineOscRef.current.frequency.setTargetAtTime(targetPitch, audioCtxRef.current.currentTime, 0.1);
 
-        const isAccelerating = keysRef.current['ArrowUp'] || keysRef.current['w'] || keysRef.current['W'];
-        const isBraking = keysRef.current['ArrowDown'] || keysRef.current['s'] || keysRef.current['S'];
-        
+      // Update engine sound
+      if (
+        engineOscRef.current &&
+        engineGainRef.current &&
+        audioCtxRef.current
+      ) {
+        const speedKmh = Math.abs(myCar.speed * 24000000);
+        const targetPitch = 50 + speedKmh * 1.5;
+        engineOscRef.current.frequency.setTargetAtTime(
+          targetPitch,
+          audioCtxRef.current.currentTime,
+          0.1,
+        );
+
+        const isAccelerating =
+          keysRef.current["ArrowUp"] ||
+          keysRef.current["w"] ||
+          keysRef.current["W"];
+        const isBraking =
+          keysRef.current["ArrowDown"] ||
+          keysRef.current["s"] ||
+          keysRef.current["S"];
+
         let targetVolume = 0.05; // Idle volume
         if (isAccelerating) targetVolume = 0.15;
         else if (isBraking) targetVolume = 0.1;
         else if (speedKmh > 5) targetVolume = 0.1; // Coasting
-        
-        engineGainRef.current.gain.setTargetAtTime(targetVolume, audioCtxRef.current.currentTime, 0.1);
+
+        engineGainRef.current.gain.setTargetAtTime(
+          targetVolume,
+          audioCtxRef.current.currentTime,
+          0.1,
+        );
       }
 
-      if (webrtcRef.current && time - lastBroadcast > 33) { // ~30fps
+      if (webrtcRef.current && time - lastBroadcast > 33) {
+        // ~30fps
         webrtcRef.current.broadcastSync({
           lat: myCar.lat,
           lng: myCar.lng,
@@ -174,7 +204,7 @@ export default function App() {
           roll: myCar.roll,
           carType: selectedCarType,
           carColor: selectedCarColor,
-          playerName: playerName
+          playerName: playerName,
         });
         lastBroadcast = time;
       }
@@ -189,14 +219,14 @@ export default function App() {
       webrtcRef.current.disconnect();
       webrtcRef.current = null;
     }
-    
+
     if (audioCtxRef.current) {
       audioCtxRef.current.close();
       audioCtxRef.current = null;
       engineOscRef.current = null;
       engineGainRef.current = null;
     }
-    
+
     cancelAnimationFrame(animationFrameRef.current);
     setInGame(false);
     peersRef.current.clear();
@@ -208,7 +238,7 @@ export default function App() {
     e.preventDefault();
     if (!chatInput.trim() || !webrtcRef.current) return;
     webrtcRef.current.broadcastChat(chatInput, playerName);
-    setChatInput('');
+    setChatInput("");
   };
 
   if (!inGame) {
@@ -222,13 +252,17 @@ export default function App() {
               </div>
             </div>
             <h1 className="text-3xl font-bold text-center mb-2">World Drive</h1>
-            <p className="text-slate-400 text-center mb-8">Multiplayer driving on real-world maps</p>
+            <p className="text-slate-400 text-center mb-8">
+              Multiplayer driving on real-world maps
+            </p>
 
             <RoomLobby onJoinRoom={(id) => setRoomId(id)} />
 
             <div className="my-4 flex items-center gap-3">
               <div className="flex-1 h-px bg-slate-700" />
-              <span className="text-xs text-slate-500 uppercase">or create a room</span>
+              <span className="text-xs text-slate-500 uppercase">
+                or create a room
+              </span>
               <div className="flex-1 h-px bg-slate-700" />
             </div>
 
@@ -240,39 +274,45 @@ export default function App() {
 
             <div className="space-y-4">
               <div className="space-y-3 mb-6">
-                <label className="block text-sm font-medium text-slate-400">Select Car</label>
+                <label className="block text-sm font-medium text-slate-400">
+                  Select Car
+                </label>
                 <div className="grid grid-cols-2 gap-2">
-                  {CAR_MODELS.map(model => (
+                  {CAR_MODELS.map((model) => (
                     <button
                       key={model.id}
                       onClick={() => setSelectedCarType(model.id)}
                       className={`py-2 px-3 rounded-lg border text-sm font-medium transition-all ${
-                        selectedCarType === model.id 
-                          ? 'bg-blue-600 border-blue-500 text-white shadow-lg shadow-blue-500/20' 
-                          : 'bg-slate-900 border-slate-700 text-slate-400 hover:border-slate-500 hover:text-slate-200'
+                        selectedCarType === model.id
+                          ? "bg-blue-600 border-blue-500 text-white shadow-lg shadow-blue-500/20"
+                          : "bg-slate-900 border-slate-700 text-slate-400 hover:border-slate-500 hover:text-slate-200"
                       }`}
                     >
                       {model.name}
                     </button>
                   ))}
                 </div>
-                
-                <label className="block text-sm font-medium text-slate-400 mt-4">Select Color</label>
+
+                <label className="block text-sm font-medium text-slate-400 mt-4">
+                  Select Color
+                </label>
                 <div className="flex flex-wrap gap-2">
-                  {CAR_COLORS.map(color => (
+                  {CAR_COLORS.map((color) => (
                     <button
                       key={color.id}
                       onClick={() => setSelectedCarColor(color.id)}
                       style={{ backgroundColor: color.id }}
                       className={`w-8 h-8 rounded-full border-2 transition-all flex items-center justify-center ${
-                        selectedCarColor === color.id 
-                          ? 'border-white scale-110 shadow-lg' 
-                          : 'border-transparent hover:scale-105 opacity-80 hover:opacity-100'
+                        selectedCarColor === color.id
+                          ? "border-white scale-110 shadow-lg"
+                          : "border-transparent hover:scale-105 opacity-80 hover:opacity-100"
                       }`}
                       title={color.name}
                     >
                       {selectedCarColor === color.id && (
-                        <Check className={`w-4 h-4 ${color.id === '#ffffff' ? 'text-black' : 'text-white'}`} />
+                        <Check
+                          className={`w-4 h-4 ${color.id === "#ffffff" ? "text-black" : "text-white"}`}
+                        />
                       )}
                     </button>
                   ))}
@@ -280,7 +320,9 @@ export default function App() {
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-slate-400 mb-1">Player Name</label>
+                <label className="block text-sm font-medium text-slate-400 mb-1">
+                  Player Name
+                </label>
                 <input
                   type="text"
                   value={playerName}
@@ -291,7 +333,9 @@ export default function App() {
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-slate-400 mb-1">Room ID</label>
+                <label className="block text-sm font-medium text-slate-400 mb-1">
+                  Room ID
+                </label>
                 <input
                   type="text"
                   value={roomId}
@@ -303,7 +347,9 @@ export default function App() {
 
               {!GOOGLE_MAPS_API_KEY && (
                 <div>
-                  <label className="block text-sm font-medium text-slate-400 mb-1">Google Maps API Key</label>
+                  <label className="block text-sm font-medium text-slate-400 mb-1">
+                    Google Maps API Key
+                  </label>
                   <input
                     type="password"
                     value={apiKey}
@@ -316,7 +362,9 @@ export default function App() {
 
               {!GOOGLE_MAPS_MAP_ID && (
                 <div>
-                  <label className="block text-sm font-medium text-slate-400 mb-1">Vector Map ID</label>
+                  <label className="block text-sm font-medium text-slate-400 mb-1">
+                    Vector Map ID
+                  </label>
                   <input
                     type="text"
                     value={mapId}
@@ -342,14 +390,14 @@ export default function App() {
 
   return (
     <div className="relative w-full h-screen overflow-hidden bg-slate-900">
-      <Map3D 
-        apiKey={apiKey} 
-        mapId={mapId} 
-        myCar={myCar} 
+      <Map3D
+        apiKey={apiKey}
+        mapId={mapId}
+        myCar={myCar}
         myCarType={selectedCarType}
         myCarColor={selectedCarColor}
         playerName={playerName}
-        peersRef={peersRef} 
+        peersRef={peersRef}
         onMapError={(msg) => {
           stopGame();
           setError(msg);
@@ -363,10 +411,12 @@ export default function App() {
           World Drive
         </h2>
         <div className="text-sm text-slate-300 space-y-1">
-          <p>Room: <span className="text-white font-mono">{roomId}</span></p>
+          <p>
+            Room: <span className="text-white font-mono">{roomId}</span>
+          </p>
           <p className="flex items-center gap-1">
             <Users className="w-4 h-4" />
-            {peerCount + 1} Player{peerCount !== 0 ? 's' : ''}
+            {peerCount + 1} Player{peerCount !== 0 ? "s" : ""}
           </p>
         </div>
       </div>
@@ -375,13 +425,19 @@ export default function App() {
         <p className="font-semibold mb-2 text-slate-300">Controls</p>
         <div className="grid grid-cols-2 gap-x-4 gap-y-2">
           <span className="text-slate-400">Accelerate</span>
-          <span className="font-mono bg-slate-800 px-2 py-0.5 rounded text-center">W / ↑</span>
+          <span className="font-mono bg-slate-800 px-2 py-0.5 rounded text-center">
+            W / ↑
+          </span>
           <span className="text-slate-400">Brake/Rev</span>
-          <span className="font-mono bg-slate-800 px-2 py-0.5 rounded text-center">S / ↓</span>
+          <span className="font-mono bg-slate-800 px-2 py-0.5 rounded text-center">
+            S / ↓
+          </span>
           <span className="text-slate-400">Steer</span>
-          <span className="font-mono bg-slate-800 px-2 py-0.5 rounded text-center">A D / ← →</span>
+          <span className="font-mono bg-slate-800 px-2 py-0.5 rounded text-center">
+            A D / ← →
+          </span>
         </div>
-        <button 
+        <button
           onClick={stopGame}
           className="w-full mt-4 bg-red-500/20 hover:bg-red-500/40 text-red-400 py-1.5 rounded transition-colors"
         >
@@ -392,9 +448,16 @@ export default function App() {
       <Speedometer car={myCar} />
 
       {/* Chat UI */}
-      <div className={`absolute bottom-4 left-4 w-80 bg-slate-900/80 backdrop-blur-md border border-slate-700/50 rounded-xl shadow-2xl flex flex-col transition-all duration-300 ${showChat ? 'h-96' : 'h-12'}`}>
-        <button 
-          onClick={() => { const next = !showChat; setShowChat(next); showChatRef.current = next; if (next) setUnreadCount(0); }}
+      <div
+        className={`absolute bottom-4 left-4 w-80 bg-slate-900/80 backdrop-blur-md border border-slate-700/50 rounded-xl shadow-2xl flex flex-col transition-all duration-300 ${showChat ? "h-96" : "h-12"}`}
+      >
+        <button
+          onClick={() => {
+            const next = !showChat;
+            setShowChat(next);
+            showChatRef.current = next;
+            if (next) setUnreadCount(0);
+          }}
           className="flex items-center justify-between p-3 text-white hover:bg-slate-800/50 rounded-t-xl transition-colors"
         >
           <span className="flex items-center gap-2 font-medium">
@@ -402,29 +465,44 @@ export default function App() {
             Chat
           </span>
           {unreadCount > 0 && !showChat && (
-            <span className="bg-blue-500 text-xs px-2 py-0.5 rounded-full">{unreadCount}</span>
+            <span className="bg-blue-500 text-xs px-2 py-0.5 rounded-full">
+              {unreadCount}
+            </span>
           )}
         </button>
-        
+
         {showChat && (
           <>
             <div className="flex-1 overflow-y-auto p-3 space-y-2 border-t border-slate-700/50 scrollbar-thin scrollbar-thumb-slate-600">
-              {chatMessages.map(msg => (
-                <div key={msg.id} className={`text-sm ${msg.senderId === webrtcRef.current?.myId ? 'text-blue-300 text-right' : 'text-slate-300'}`}>
-                  <span className="font-mono text-xs opacity-50 mr-2">{msg.senderName}</span>
-                  <span className="bg-slate-800/80 px-2 py-1 rounded-lg inline-block">{msg.text}</span>
+              {chatMessages.map((msg) => (
+                <div
+                  key={msg.id}
+                  className={`text-sm ${msg.senderId === webrtcRef.current?.myId ? "text-blue-300 text-right" : "text-slate-300"}`}
+                >
+                  <span className="font-mono text-xs opacity-50 mr-2">
+                    {msg.senderName}
+                  </span>
+                  <span className="bg-slate-800/80 px-2 py-1 rounded-lg inline-block">
+                    {msg.text}
+                  </span>
                 </div>
               ))}
             </div>
-            <form onSubmit={sendChat} className="p-2 border-t border-slate-700/50 flex gap-2">
+            <form
+              onSubmit={sendChat}
+              className="p-2 border-t border-slate-700/50 flex gap-2"
+            >
               <input
                 type="text"
                 value={chatInput}
-                onChange={e => setChatInput(e.target.value)}
+                onChange={(e) => setChatInput(e.target.value)}
                 placeholder="Type a message..."
                 className="flex-1 bg-slate-800 border border-slate-700 rounded px-3 py-1.5 text-sm text-white focus:outline-none focus:border-blue-500"
               />
-              <button type="submit" className="bg-blue-600 hover:bg-blue-500 text-white p-1.5 rounded transition-colors">
+              <button
+                type="submit"
+                className="bg-blue-600 hover:bg-blue-500 text-white p-1.5 rounded transition-colors"
+              >
                 <Send className="w-4 h-4" />
               </button>
             </form>
