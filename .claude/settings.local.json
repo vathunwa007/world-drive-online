@@ -2,7 +2,9 @@
   "permissions": {
     "allow": [
       "Bash(npx tsc:*)",
-      "Bash(git -C /Users/thunwamohama/Documents/Project/world-drive remote -v)"
+      "Bash(git -C /Users/thunwamohama/Documents/Project/world-drive remote -v)",
+      "Bash(npm run:*)",
+      "Bash(npx tsx:*)"
     ]
   }
 }
