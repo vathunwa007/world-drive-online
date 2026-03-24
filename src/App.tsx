@@ -50,6 +50,7 @@ export default function App() {
   const [unreadCount, setUnreadCount] = useState(0);
   const [selectedCarType, setSelectedCarType] = useState(CAR_MODELS[0].id);
   const [selectedCarColor, setSelectedCarColor] = useState(CAR_COLORS[0].id);
+  const [isOnRoad, setIsOnRoad] = useState(true);
   const [playerName, setPlayerName] = useState(
     "Player" + Math.floor(Math.random() * 1000),
   );
@@ -423,6 +424,7 @@ export default function App() {
           stopGame();
           setError(msg);
         }}
+        onRoadStatusChange={setIsOnRoad}
       />
 
       {/* HUD */}
@@ -438,6 +440,9 @@ export default function App() {
           <p className="flex items-center gap-1">
             <Users className="w-4 h-4" />
             {peerCount + 1} Player{peerCount !== 0 ? "s" : ""}
+          </p>
+          <p className={`font-semibold ${isOnRoad ? "text-green-400" : "text-amber-400"}`}>
+            {isOnRoad ? "On Road" : "Off Road (slow)"}
           </p>
         </div>
       </div>

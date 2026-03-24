@@ -3,6 +3,7 @@ import { setOptions, importLibrary } from '@googlemaps/js-api-loader';
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { CarPhysics } from '../lib/physics';
+import { RoadDetector } from '../lib/roadDetector';
 import { PeerData } from '../lib/webrtc';
 
 interface Map3DProps {
@@ -14,9 +15,10 @@ interface Map3DProps {
   playerName: string;
   peersRef: React.MutableRefObject<Map<string, PeerData>>;
   onMapError?: (error: string) => void;
+  onRoadStatusChange?: (onRoad: boolean) => void;
 }
 
-export const Map3D: React.FC<Map3DProps> = ({ apiKey, mapId, myCar, myCarType, myCarColor, playerName, peersRef, onMapError }) => {
+export const Map3D: React.FC<Map3DProps> = ({ apiKey, mapId, myCar, myCarType, myCarColor, playerName, peersRef, onMapError, onRoadStatusChange }) => {
   const mapRef = useRef<HTMLDivElement>(null);
   const [map, setMap] = useState<google.maps.Map | null>(null);
   const overlayRef = useRef<google.maps.WebGLOverlayView | null>(null);
@@ -28,6 +30,7 @@ export const Map3D: React.FC<Map3DProps> = ({ apiKey, mapId, myCar, myCarType, m
   const myCarMeshRef = useRef<THREE.Group | null>(null);
   const peerMeshesRef = useRef<Map<string, THREE.Group>>(new Map());
   const zoomRef = useRef(20);
+  const roadDetectorRef = useRef(new RoadDetector());
 
   useEffect(() => {
     const handleWheel = (e: WheelEvent) => {
@@ -116,6 +119,15 @@ export const Map3D: React.FC<Map3DProps> = ({ apiKey, mapId, myCar, myCarType, m
 
       overlay.onDraw = ({ gl, transformer }) => {
         if (!sceneRef.current || !cameraRef.current || !rendererRef.current) return;
+
+        // Sample the map pixel color at center BEFORE rendering Three.js on top.
+        // At this point, Google Maps has already drawn roads/terrain to the framebuffer.
+        const prevOnRoad = myCar.onRoad;
+        roadDetectorRef.current.sampleFromGL(gl);
+        myCar.onRoad = roadDetectorRef.current.onRoad;
+        if (myCar.onRoad !== prevOnRoad && onRoadStatusChange) {
+          onRoadStatusChange(myCar.onRoad);
+        }
 
         // Animate my car wheels
         if (myCarMeshRef.current && myCarMeshRef.current.userData.frontWheels) {

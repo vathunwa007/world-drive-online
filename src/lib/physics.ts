@@ -6,8 +6,9 @@ export class CarPhysics {
   public steeringAngle: number = 0;
   public pitch: number = 0; // radians
   public roll: number = 0; // radians
+  public onRoad: boolean = true; // Whether the car is currently on a road
 
-  // Constants
+  // On-road constants
   private readonly MAX_SPEED = 0.00001; // Approx 240 km/h
   private readonly MAX_REVERSE_SPEED = 0.000003; // Approx 72 km/h
   private readonly BASE_ACCELERATION = 0.0000002;
@@ -15,6 +16,12 @@ export class CarPhysics {
   private readonly FRICTION = 0.992;
   private readonly DRAG = 0.995; // Air resistance
   private readonly MAX_STEERING_ANGLE = 40; // degrees
+
+  // Off-road modifiers
+  private readonly OFFROAD_SPEED_FACTOR = 0.4; // Max speed is 40% of on-road
+  private readonly OFFROAD_ACCEL_FACTOR = 0.5; // Acceleration is 50% of on-road
+  private readonly OFFROAD_FRICTION = 0.975; // Much more friction off-road
+  private readonly OFFROAD_DRAG = 0.980; // More drag off-road
 
   constructor(lat: number, lng: number, heading: number = 0) {
     this.lat = lat;
@@ -34,11 +41,19 @@ export class CarPhysics {
     // Smooth steering
     this.steeringAngle += (targetSteering - this.steeringAngle) * 0.15;
 
+    // Terrain-aware physics: on-road vs off-road
+    const terrainAccelFactor = this.onRoad ? 1.0 : this.OFFROAD_ACCEL_FACTOR;
+    const terrainSpeedFactor = this.onRoad ? 1.0 : this.OFFROAD_SPEED_FACTOR;
+    const terrainFriction = this.onRoad ? this.FRICTION : this.OFFROAD_FRICTION;
+    const terrainDrag = this.onRoad ? this.DRAG : this.OFFROAD_DRAG;
+    const effectiveMaxSpeed = this.MAX_SPEED * terrainSpeedFactor;
+    const effectiveMaxReverse = this.MAX_REVERSE_SPEED * terrainSpeedFactor;
+
     // Acceleration & Braking with nuanced curves
     // Acceleration decreases as speed increases (power curve)
     const speedRatio = Math.abs(this.speed) / this.MAX_SPEED;
-    const currentAcceleration = this.BASE_ACCELERATION * (1 - speedRatio * 0.5);
-    
+    const currentAcceleration = this.BASE_ACCELERATION * (1 - speedRatio * 0.5) * terrainAccelFactor;
+
     let isAccelerating = false;
     let isBraking = false;
 
@@ -62,13 +77,13 @@ export class CarPhysics {
       }
     }
 
-    // Apply friction and drag
-    this.speed *= this.FRICTION;
-    this.speed *= this.DRAG;
+    // Apply terrain-aware friction and drag
+    this.speed *= terrainFriction;
+    this.speed *= terrainDrag;
 
-    // Cap speed
-    if (this.speed > this.MAX_SPEED) this.speed = this.MAX_SPEED;
-    if (this.speed < -this.MAX_REVERSE_SPEED) this.speed = -this.MAX_REVERSE_SPEED;
+    // Cap speed based on terrain
+    if (this.speed > effectiveMaxSpeed) this.speed = effectiveMaxSpeed;
+    if (this.speed < -effectiveMaxReverse) this.speed = -effectiveMaxReverse;
 
     // Stop completely if very slow and no input
     if (Math.abs(this.speed) < 0.00000001 && !isAccelerating && !isBraking) {
