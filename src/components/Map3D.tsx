@@ -44,6 +44,8 @@ export const Map3D: React.FC<Map3DProps> = ({
   const EXTENDED_MAX_ZOOM = 28;
   const roadDetectorRef = useRef(new RoadDetector());
   const [mapType, setMapType] = useState<"roadmap" | "satellite">("roadmap");
+  const [is3D, setIs3D] = useState(true);
+  const is3DRef = useRef(true);
 
   useEffect(() => {
     const handleWheel = (e: WheelEvent) => {
@@ -184,6 +186,10 @@ export const Map3D: React.FC<Map3DProps> = ({
             const effectiveZoom = Math.min(zoomRef.current, 22);
             const zoomScale = Math.pow(2, 20 - effectiveZoom);
             const scaleFactor = Math.max(0.3, Math.min(zoomScale, 50));
+            // In 3D (tilt 60°) label tilts 30° to face camera; in 2D (tilt 0°) label lies flat facing up
+            const labelTilt = is3DRef.current
+              ? -((30 * Math.PI) / 180)
+              : (90 * Math.PI) / 180;
             myCarMeshRef.current.children.forEach((child) => {
               if (child.userData.isNameSprite) {
                 child.scale.set(
@@ -191,7 +197,14 @@ export const Map3D: React.FC<Map3DProps> = ({
                   child.userData.baseScale.y * scaleFactor,
                   child.userData.baseScale.z,
                 );
-                child.position.y = child.userData.baseY * scaleFactor;
+                if (is3DRef.current) {
+                  child.position.y = child.userData.baseY * scaleFactor;
+                  child.position.z = 0;
+                } else {
+                  child.position.y = 0;
+                  child.position.z = -child.userData.baseY * scaleFactor;
+                }
+                child.rotation.x = labelTilt;
               }
             });
           }
@@ -245,6 +258,9 @@ export const Map3D: React.FC<Map3DProps> = ({
             // Counter-rotate label so it faces the same direction as the player's camera
             const headingDiffRad =
               (peer.heading - myCar.heading) * (Math.PI / 180);
+            const labelTilt = is3DRef.current
+              ? -((30 * Math.PI) / 180)
+              : (90 * Math.PI) / 180;
             mesh.children.forEach((child) => {
               if (child.userData.isNameSprite) {
                 child.scale.set(
@@ -252,7 +268,14 @@ export const Map3D: React.FC<Map3DProps> = ({
                   child.userData.baseScale.y * scaleFactor,
                   child.userData.baseScale.z,
                 );
-                child.position.y = child.userData.baseY * scaleFactor;
+                if (is3DRef.current) {
+                  child.position.y = child.userData.baseY * scaleFactor;
+                  child.position.z = 0;
+                } else {
+                  child.position.y = 0;
+                  child.position.z = -child.userData.baseY * scaleFactor;
+                }
+                child.rotation.x = labelTilt;
                 child.rotation.y = headingDiffRad;
               }
             });
@@ -301,6 +324,11 @@ export const Map3D: React.FC<Map3DProps> = ({
       }
     };
   }, [apiKey, mapId]);
+
+  // Sync is3D ref
+  useEffect(() => {
+    is3DRef.current = is3D;
+  }, [is3D]);
 
   // Sync map type with map instance
   useEffect(() => {
@@ -365,7 +393,7 @@ export const Map3D: React.FC<Map3DProps> = ({
         map.moveCamera({
           center: { lat: myCar.lat, lng: myCar.lng },
           heading: myCar.heading,
-          tilt: 60,
+          tilt: is3D ? 60 : 0,
           zoom: effectiveZoom,
         });
 
@@ -388,7 +416,7 @@ export const Map3D: React.FC<Map3DProps> = ({
     return () => {
       cancelAnimationFrame(animationFrameId);
     };
-  }, [map, myCar]);
+  }, [map, myCar, is3D]);
 
   return (
     <div className="relative w-full h-full overflow-hidden">
@@ -422,6 +450,17 @@ export const Map3D: React.FC<Map3DProps> = ({
           }
         >
           {mapType === "roadmap" ? "🛰" : "🗺"}
+        </button>
+        <button
+          className={`w-10 h-10 backdrop-blur-md border border-slate-700/50 rounded-full shadow-lg flex items-center justify-center text-xs font-bold transition-colors ${
+            is3D
+              ? "bg-blue-600/80 text-white hover:bg-blue-500/80"
+              : "bg-slate-900/80 text-white hover:bg-slate-900/100"
+          }`}
+          onClick={() => setIs3D((prev) => !prev)}
+          title={is3D ? "Switch to 2D" : "Switch to 3D"}
+        >
+          {is3D ? "3D" : "2D"}
         </button>
       </div>
     </div>
