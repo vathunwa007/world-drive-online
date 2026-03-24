@@ -1,0 +1,5 @@
+{
+  "name": "World Drive",
+  "description": "A browser-based multiplayer driving game using Google Maps and WebRTC.",
+  "requestFramePermissions": []
+}
