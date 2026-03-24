@@ -16,9 +16,9 @@ const START_LAT = 13.7563;
 const START_LNG = 100.5018;
 
 const CAR_MODELS = [
-  { id: "sports", name: "Sports Car" },
+  { id: "car", name: "Sports Car" },
   { id: "suv", name: "SUV" },
-  { id: "truck", name: "Truck" },
+  { id: "bus", name: "Bus" },
   { id: "compact", name: "Compact" },
 ];
 
@@ -144,6 +144,7 @@ export default function App() {
 
       webrtc.connect(roomId);
     }
+    myCar.setCarType(selectedCarType);
     setInGame(true);
 
     // Initialize Audio

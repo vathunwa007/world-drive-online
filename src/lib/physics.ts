@@ -1,3 +1,74 @@
+type CarProfile = {
+  maxSpeed: number;
+  maxReverseSpeed: number;
+  acceleration: number;
+  braking: number;
+  friction: number;
+  drag: number;
+  maxSteeringAngle: number;
+  turnMultiplier: number;
+  steeringResponse: number;
+  pitchEffect: number;
+  rollEffect: number;
+};
+
+const CAR_PROFILES: Record<string, CarProfile> = {
+  car: {
+    maxSpeed: 0.00001,
+    maxReverseSpeed: 0.000003,
+    acceleration: 0.0000002,
+    braking: 0.0000005,
+    friction: 0.992,
+    drag: 0.995,
+    maxSteeringAngle: 40,
+    turnMultiplier: 12.0,
+    steeringResponse: 0.15,
+    pitchEffect: 1.0,
+    rollEffect: 0.4,
+  },
+  suv: {
+    maxSpeed: 0.000008,
+    maxReverseSpeed: 0.0000025,
+    acceleration: 0.00000018,
+    braking: 0.0000004,
+    friction: 0.991,
+    drag: 0.994,
+    maxSteeringAngle: 38,
+    turnMultiplier: 10.0,
+    steeringResponse: 0.12,
+    pitchEffect: 1.2,
+    rollEffect: 0.5,
+  },
+  bus: {
+    maxSpeed: 0.000006,
+    maxReverseSpeed: 0.0000015,
+    acceleration: 0.00000012,
+    braking: 0.0000003,
+    friction: 0.990,
+    drag: 0.992,
+    maxSteeringAngle: 30,
+    turnMultiplier: 5.0,
+    steeringResponse: 0.08,
+    pitchEffect: 0.6,
+    rollEffect: 0.6,
+  },
+  compact: {
+    maxSpeed: 0.000009,
+    maxReverseSpeed: 0.0000028,
+    acceleration: 0.00000022,
+    braking: 0.0000005,
+    friction: 0.993,
+    drag: 0.996,
+    maxSteeringAngle: 42,
+    turnMultiplier: 13.0,
+    steeringResponse: 0.18,
+    pitchEffect: 1.0,
+    rollEffect: 0.35,
+  },
+};
+
+const DEFAULT_PROFILE = CAR_PROFILES.car;
+
 export class CarPhysics {
   public lat: number;
   public lng: number;
@@ -6,61 +77,59 @@ export class CarPhysics {
   public steeringAngle: number = 0;
   public pitch: number = 0; // radians
   public roll: number = 0; // radians
-  public onRoad: boolean = true; // Whether the car is currently on a road
+  public onRoad: boolean = true;
 
-  // On-road constants
-  private readonly MAX_SPEED = 0.00001; // Approx 240 km/h
-  private readonly MAX_REVERSE_SPEED = 0.000003; // Approx 72 km/h
-  private readonly BASE_ACCELERATION = 0.0000002;
-  private readonly BASE_BRAKING = 0.0000005;
-  private readonly FRICTION = 0.992;
-  private readonly DRAG = 0.995; // Air resistance
-  private readonly MAX_STEERING_ANGLE = 40; // degrees
+  private profile: CarProfile;
 
   // Off-road modifiers
-  private readonly OFFROAD_SPEED_FACTOR = 0.4; // Max speed is 40% of on-road
-  private readonly OFFROAD_ACCEL_FACTOR = 0.5; // Acceleration is 50% of on-road
-  private readonly OFFROAD_FRICTION = 0.975; // Much more friction off-road
-  private readonly OFFROAD_DRAG = 0.980; // More drag off-road
+  private readonly OFFROAD_SPEED_FACTOR = 0.4;
+  private readonly OFFROAD_ACCEL_FACTOR = 0.5;
+  private readonly OFFROAD_FRICTION = 0.975;
+  private readonly OFFROAD_DRAG = 0.980;
 
-  constructor(lat: number, lng: number, heading: number = 0) {
+  constructor(lat: number, lng: number, heading: number = 0, carType?: string) {
     this.lat = lat;
     this.lng = lng;
     this.heading = heading;
+    this.profile = (carType && CAR_PROFILES[carType]) || DEFAULT_PROFILE;
+  }
+
+  public setCarType(carType: string) {
+    this.profile = CAR_PROFILES[carType] || DEFAULT_PROFILE;
   }
 
   public update(keys: { [key: string]: boolean }) {
+    const p = this.profile;
+
     // Steering input
     let targetSteering = 0;
     if (keys['ArrowLeft'] || keys['a']) {
-      targetSteering = -this.MAX_STEERING_ANGLE;
+      targetSteering = -p.maxSteeringAngle;
     } else if (keys['ArrowRight'] || keys['d']) {
-      targetSteering = this.MAX_STEERING_ANGLE;
+      targetSteering = p.maxSteeringAngle;
     }
-    
-    // Smooth steering
-    this.steeringAngle += (targetSteering - this.steeringAngle) * 0.15;
 
-    // Terrain-aware physics: on-road vs off-road
+    // Smooth steering — heavier vehicles respond slower
+    this.steeringAngle += (targetSteering - this.steeringAngle) * p.steeringResponse;
+
+    // Terrain-aware physics
     const terrainAccelFactor = this.onRoad ? 1.0 : this.OFFROAD_ACCEL_FACTOR;
     const terrainSpeedFactor = this.onRoad ? 1.0 : this.OFFROAD_SPEED_FACTOR;
-    const terrainFriction = this.onRoad ? this.FRICTION : this.OFFROAD_FRICTION;
-    const terrainDrag = this.onRoad ? this.DRAG : this.OFFROAD_DRAG;
-    const effectiveMaxSpeed = this.MAX_SPEED * terrainSpeedFactor;
-    const effectiveMaxReverse = this.MAX_REVERSE_SPEED * terrainSpeedFactor;
+    const terrainFriction = this.onRoad ? p.friction : this.OFFROAD_FRICTION;
+    const terrainDrag = this.onRoad ? p.drag : this.OFFROAD_DRAG;
+    const effectiveMaxSpeed = p.maxSpeed * terrainSpeedFactor;
+    const effectiveMaxReverse = p.maxReverseSpeed * terrainSpeedFactor;
 
-    // Acceleration & Braking with nuanced curves
     // Acceleration decreases as speed increases (power curve)
-    const speedRatio = Math.abs(this.speed) / this.MAX_SPEED;
-    const currentAcceleration = this.BASE_ACCELERATION * (1 - speedRatio * 0.5) * terrainAccelFactor;
+    const speedRatio = Math.abs(this.speed) / p.maxSpeed;
+    const currentAcceleration = p.acceleration * (1 - speedRatio * 0.5) * terrainAccelFactor;
 
     let isAccelerating = false;
     let isBraking = false;
 
     if (keys['ArrowUp'] || keys['w']) {
       if (this.speed < 0) {
-        // Braking while reversing
-        this.speed += this.BASE_BRAKING;
+        this.speed += p.braking;
         isBraking = true;
       } else {
         this.speed += currentAcceleration;
@@ -68,8 +137,7 @@ export class CarPhysics {
       }
     } else if (keys['ArrowDown'] || keys['s']) {
       if (this.speed > 0) {
-        // Braking while moving forward
-        this.speed -= this.BASE_BRAKING;
+        this.speed -= p.braking;
         isBraking = true;
       } else {
         this.speed -= currentAcceleration;
@@ -90,38 +158,32 @@ export class CarPhysics {
       this.speed = 0;
     }
 
-    // Turn speed depends on forward speed and steering angle
-    // Realistic tire friction: less grip at high speeds
+    // Turn speed — bus turns much wider than sports car
     const gripFactor = Math.max(0.3, 1 - speedRatio * 0.7);
-    // Increased multiplier to 12.0 to make the turning radius extremely tight
-    const turnSpeed = (this.steeringAngle / this.MAX_STEERING_ANGLE) * gripFactor * (this.speed / this.MAX_SPEED) * 12.0;
-    
+    const turnSpeed = (this.steeringAngle / p.maxSteeringAngle) * gripFactor * (this.speed / p.maxSpeed) * p.turnMultiplier;
+
     this.heading += turnSpeed;
 
-    // Speed bleeds off when turning sharply (scrub radius/friction)
-    const scrubFriction = 1 - (Math.abs(this.steeringAngle) / this.MAX_STEERING_ANGLE) * 0.01;
+    // Speed bleeds off when turning sharply
+    const scrubFriction = 1 - (Math.abs(this.steeringAngle) / p.maxSteeringAngle) * 0.01;
     this.speed *= scrubFriction;
 
     // Normalize heading
     this.heading = (this.heading + 360) % 360;
 
-    // Suspension effects (Pitch and Roll)
-    // Pitch: dives when braking, squats when accelerating
+    // Suspension effects
     let targetPitch = 0;
     const speedSign = this.speed > 0.0000001 ? 1 : (this.speed < -0.0000001 ? -1 : 0);
-    
+
     if (isBraking && speedSign !== 0) {
-      targetPitch = speedSign * -2.5; // Dive (negative pitch)
+      targetPitch = speedSign * -2.5 * p.pitchEffect;
     } else if (isAccelerating) {
-      targetPitch = (speedSign !== 0 ? speedSign : 1) * 1.5; // Squat (positive pitch)
+      targetPitch = (speedSign !== 0 ? speedSign : 1) * 1.5 * p.pitchEffect;
     }
     this.pitch += (targetPitch - this.pitch) * 0.1;
 
-    // Roll: leans outward during turns based on speed and steering
-    // turnSpeed is negative when turning left, we want to lean right (outward).
-    // Positive roll leans left, so we want negative roll to lean right.
-    // If turnSpeed is negative (left), we want negative roll. So targetRoll = turnSpeed.
-    const targetRoll = turnSpeed * speedRatio * 0.4;
+    // Roll
+    const targetRoll = turnSpeed * speedRatio * p.rollEffect;
     this.roll += (targetRoll - this.roll) * 0.15;
 
     // Update position

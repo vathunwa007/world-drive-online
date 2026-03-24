@@ -155,16 +155,30 @@ export const Map3D: React.FC<Map3DProps> = ({
           }
 
           // Animate my car wheels
-          if (
-            myCarMeshRef.current &&
-            myCarMeshRef.current.userData.frontWheels
-          ) {
+          if (myCarMeshRef.current) {
+            const ud = myCarMeshRef.current.userData;
             const steeringRad = myCar.steeringAngle * (Math.PI / 180);
-            myCarMeshRef.current.userData.frontWheels.forEach(
-              (wheelGroup: THREE.Group) => {
+            const spinAmount = myCar.speed * 0.3;
+
+            // Fallback car wheels - steering
+            if (ud.frontWheels) {
+              ud.frontWheels.forEach((wheelGroup: THREE.Group) => {
                 wheelGroup.rotation.y = -steeringRad;
-              },
-            );
+              });
+            }
+
+            // GLB model wheels - spin based on speed
+            if (ud.glbWheels) {
+              ud.glbWheels.forEach((wheel: THREE.Object3D) => {
+                wheel.rotation.x += spinAmount;
+              });
+            }
+            // GLB model front wheels - steering
+            if (ud.glbFrontWheels) {
+              ud.glbFrontWheels.forEach((wheel: THREE.Object3D) => {
+                wheel.rotation.y = -steeringRad;
+              });
+            }
           }
 
           // Render my car
@@ -243,10 +257,23 @@ export const Map3D: React.FC<Map3DProps> = ({
             }
 
             // Animate peer wheels
-            if (mesh.userData.frontWheels) {
-              const steeringRad = (peer.steeringAngle || 0) * (Math.PI / 180);
-              mesh.userData.frontWheels.forEach((wheelGroup: THREE.Group) => {
+            const peerUd = mesh.userData;
+            const steeringRad = (peer.steeringAngle || 0) * (Math.PI / 180);
+            const peerSpinAmount = (peer.speed || 0) * 0.3;
+
+            if (peerUd.frontWheels) {
+              peerUd.frontWheels.forEach((wheelGroup: THREE.Group) => {
                 wheelGroup.rotation.y = -steeringRad;
+              });
+            }
+            if (peerUd.glbWheels) {
+              peerUd.glbWheels.forEach((wheel: THREE.Object3D) => {
+                wheel.rotation.x += peerSpinAmount;
+              });
+            }
+            if (peerUd.glbFrontWheels) {
+              peerUd.glbFrontWheels.forEach((wheel: THREE.Object3D) => {
+                wheel.rotation.y = -steeringRad;
               });
             }
 
@@ -469,6 +496,11 @@ export const Map3D: React.FC<Map3DProps> = ({
 
 const gltfLoader = new GLTFLoader();
 
+// Per-model Y-rotation offset (radians) to make the model face +Z (forward)
+const MODEL_ROTATION_Y: Record<string, number> = {
+  bus: Math.PI / 2, // bus model faces +X by default, rotate -90°
+};
+
 // Map tilt is 60° from straight-down. To face the camera, the label tilts
 // (90° - 60°) = 30° from vertical in the scene's local coordinate space.
 const MAP_TILT_RAD = (30 * Math.PI) / 180;
@@ -660,6 +692,32 @@ function createCarMesh(
         }
       });
 
+      // Apply per-model rotation offset
+      const rotY = MODEL_ROTATION_Y[type];
+      if (rotY) {
+        model.rotation.y = rotY;
+      }
+
+      // Detect wheel objects from the loaded model by name
+      const wheels: THREE.Object3D[] = [];
+      const frontWheels: THREE.Object3D[] = [];
+      model.traverse((child) => {
+        const name = child.name.toLowerCase();
+        console.log(`[${type}] mesh: "${child.name}" type: ${child.type}`);
+        if (name.includes("wheel") || name.includes("tire")) {
+          wheels.push(child);
+          if (name.includes("front") || name.includes("fl") || name.includes("fr")) {
+            frontWheels.push(child);
+          }
+        }
+      });
+      group.userData.glbWheels = wheels;
+      if (frontWheels.length > 0) {
+        group.userData.glbFrontWheels = frontWheels;
+      }
+      console.log(`[${type}] wheels found: ${wheels.map(w => w.name).join(", ") || "none"}`);
+      console.log(`[${type}] front wheels: ${frontWheels.map(w => w.name).join(", ") || "none"}`);
+
       // Clear the fallback box and add the loaded model
       const toRemove = group.children.filter((c) => !c.userData.isNameSprite);
       toRemove.forEach((c) => {
@@ -723,12 +781,12 @@ function createFallbackCar(
     wheelRadius = 0.5;
     wheelZ = 1.6;
     wheelX = 1.2;
-  } else if (type === "truck") {
-    height = 1.8;
-    length = 5.5;
-    width = 2.4;
+  } else if (type === "bus") {
+    height = 2.5;
+    length = 8;
+    width = 2.5;
     wheelRadius = 0.6;
-    wheelZ = 2.0;
+    wheelZ = 3.0;
     wheelX = 1.3;
   } else if (type === "compact") {
     height = 1.2;
