@@ -20,11 +20,11 @@ export const Map3D: React.FC<Map3DProps> = ({ apiKey, mapId, myCar, myCarType, m
   const mapRef = useRef<HTMLDivElement>(null);
   const [map, setMap] = useState<google.maps.Map | null>(null);
   const overlayRef = useRef<google.maps.WebGLOverlayView | null>(null);
-  
+
   const sceneRef = useRef<THREE.Scene | null>(null);
   const cameraRef = useRef<THREE.PerspectiveCamera | null>(null);
   const rendererRef = useRef<THREE.WebGLRenderer | null>(null);
-  
+
   const myCarMeshRef = useRef<THREE.Group | null>(null);
   const peerMeshesRef = useRef<Map<string, THREE.Group>>(new Map());
   const zoomRef = useRef(20);
@@ -83,7 +83,7 @@ export const Map3D: React.FC<Map3DProps> = ({ apiKey, mapId, myCar, myCarType, m
 
       overlay.onAdd = () => {
         sceneRef.current = new THREE.Scene();
-        
+
         // Rotate the scene so that Three.js Y axis points Up (Google Maps Z axis)
         // and Three.js Z axis points South (Google Maps -Y axis)
         sceneRef.current.rotation.x = Math.PI / 2;
@@ -92,11 +92,11 @@ export const Map3D: React.FC<Map3DProps> = ({ apiKey, mapId, myCar, myCarType, m
         sceneRef.current.rotation.y = Math.PI;
 
         cameraRef.current = new THREE.PerspectiveCamera();
-        
+
         const light = new THREE.DirectionalLight(0xffffff, 1);
         light.position.set(0, 10, 0);
         sceneRef.current.add(light);
-        
+
         const ambientLight = new THREE.AmbientLight(0xffffff, 0.5);
         sceneRef.current.add(ambientLight);
 
@@ -133,14 +133,14 @@ export const Map3D: React.FC<Map3DProps> = ({ apiKey, mapId, myCar, myCarType, m
             new Float32Array([1, 1, 1])
           )
         );
-        
-        // Update sprite scale for my car based on zoom
+
+        // Update label scale for my car based on zoom
         if (myCarMeshRef.current) {
           const zoomScale = Math.pow(2, 20 - zoomRef.current);
           const scaleFactor = Math.max(0.1, Math.min(zoomScale, 50));
           myCarMeshRef.current.children.forEach(child => {
             if (child.userData.isNameSprite) {
-              child.scale.set(child.userData.baseScale.x * scaleFactor, child.userData.baseScale.y * scaleFactor, child.userData.baseScale.z);
+              child.scale.set(-child.userData.baseScale.x * scaleFactor, child.userData.baseScale.y * scaleFactor, child.userData.baseScale.z);
               child.position.y = child.userData.baseY * scaleFactor;
             }
           });
@@ -153,10 +153,10 @@ export const Map3D: React.FC<Map3DProps> = ({ apiKey, mapId, myCar, myCarType, m
 
         // Render peers
         if (myCarMeshRef.current) myCarMeshRef.current.visible = false;
-        
+
         peersRef.current.forEach((peer, id) => {
           let mesh = peerMeshesRef.current.get(id);
-          
+
           if (!mesh || mesh.userData.carType !== peer.carType || mesh.userData.carColor !== peer.carColor) {
             if (mesh) {
               sceneRef.current!.remove(mesh);
@@ -169,7 +169,7 @@ export const Map3D: React.FC<Map3DProps> = ({ apiKey, mapId, myCar, myCarType, m
             updateNameSprite(mesh, peer.playerName, false);
             mesh.userData.playerName = peer.playerName;
           }
-          
+
           // Animate peer wheels
           if (mesh.userData.frontWheels) {
             const steeringRad = (peer.steeringAngle || 0) * (Math.PI / 180);
@@ -178,13 +178,16 @@ export const Map3D: React.FC<Map3DProps> = ({ apiKey, mapId, myCar, myCarType, m
             });
           }
 
-          // Update sprite scale for peer car based on zoom
+          // Update label scale and heading for peer car based on zoom
           const zoomScale = Math.pow(2, 20 - zoomRef.current);
           const scaleFactor = Math.max(0.1, Math.min(zoomScale, 50));
+          // Counter-rotate label so it faces the same direction as the player's camera
+          const headingDiffRad = (peer.heading - myCar.heading) * (Math.PI / 180);
           mesh.children.forEach(child => {
             if (child.userData.isNameSprite) {
-              child.scale.set(child.userData.baseScale.x * scaleFactor, child.userData.baseScale.y * scaleFactor, child.userData.baseScale.z);
+              child.scale.set(-child.userData.baseScale.x * scaleFactor, child.userData.baseScale.y * scaleFactor, child.userData.baseScale.z);
               child.position.y = child.userData.baseY * scaleFactor;
+              child.rotation.y = headingDiffRad;
             }
           });
 
@@ -199,7 +202,7 @@ export const Map3D: React.FC<Map3DProps> = ({ apiKey, mapId, myCar, myCarType, m
               new Float32Array([1, 1, 1])
             )
           );
-          
+
           rendererRef.current!.render(sceneRef.current!, cameraRef.current!);
         });
 
@@ -231,16 +234,16 @@ export const Map3D: React.FC<Map3DProps> = ({ apiKey, mapId, myCar, myCarType, m
   // Update my car mesh if type, color, or name changes
   useEffect(() => {
     if (!sceneRef.current) return;
-    
-    if (!myCarMeshRef.current || 
-        myCarMeshRef.current.userData.carType !== myCarType || 
+
+    if (!myCarMeshRef.current ||
+        myCarMeshRef.current.userData.carType !== myCarType ||
         myCarMeshRef.current.userData.carColor !== myCarColor) {
-      
+
       if (myCarMeshRef.current) {
         sceneRef.current.remove(myCarMeshRef.current);
         disposeCarMesh(myCarMeshRef.current);
       }
-      
+
       myCarMeshRef.current = createCarMesh(myCarType, myCarColor, playerName, true);
       sceneRef.current.add(myCarMeshRef.current);
     } else if (myCarMeshRef.current.userData.playerName !== playerName) {
@@ -298,14 +301,14 @@ export const Map3D: React.FC<Map3DProps> = ({ apiKey, mapId, myCar, myCarType, m
     <div className="relative w-full h-full">
       <div ref={mapRef} className="w-full h-full" />
       <div className="absolute bottom-6 right-6 flex flex-col gap-2 z-10">
-        <button 
+        <button
           className="w-10 h-10 bg-white text-black rounded-full shadow-lg flex items-center justify-center text-xl font-bold hover:bg-gray-100 transition-colors"
           onClick={() => zoomRef.current = Math.min(22, zoomRef.current + 1)}
           title="Zoom In"
         >
           +
         </button>
-        <button 
+        <button
           className="w-10 h-10 bg-white text-black rounded-full shadow-lg flex items-center justify-center text-xl font-bold hover:bg-gray-100 transition-colors"
           onClick={() => zoomRef.current = Math.max(10, zoomRef.current - 1)}
           title="Zoom Out"
@@ -319,24 +322,29 @@ export const Map3D: React.FC<Map3DProps> = ({ apiKey, mapId, myCar, myCarType, m
 
 const gltfLoader = new GLTFLoader();
 
-function createNameSprite(name: string, isMe: boolean = false): THREE.Sprite {
+// Map tilt is 60° from straight-down. To face the camera, the label tilts
+// (90° - 60°) = 30° from vertical in the scene's local coordinate space.
+const MAP_TILT_RAD = (30 * Math.PI) / 180;
+
+function createNameLabel(name: string, isMe: boolean = false): THREE.Mesh {
   const canvas = document.createElement('canvas');
   const context = canvas.getContext('2d');
-  canvas.width = 1536;
-  canvas.height = 384;
+  canvas.width = 2048;
+  canvas.height = 512;
 
   if (context) {
-    context.font = 'Bold 140px "Inter", "Segoe UI", Arial, sans-serif';
-    context.fillStyle = isMe ? 'rgba(37, 99, 235, 0.85)' : 'rgba(0, 0, 0, 0.6)';
+    const fontSize = 200;
+    context.font = `Bold ${fontSize}px "Inter", "Segoe UI", Arial, sans-serif`;
+    context.fillStyle = isMe ? 'rgba(37, 99, 235, 0.9)' : 'rgba(0, 0, 0, 0.75)';
     const textWidth = context.measureText(name).width;
-    
-    // Draw rounded rectangle for background
-    const bgWidth = textWidth + 160;
-    const bgHeight = 180;
-    const x = (1536 - bgWidth) / 2;
-    const y = 80;
-    const radius = 40;
-    
+
+    const bgPadding = 120;
+    const bgWidth = textWidth + bgPadding * 2;
+    const bgHeight = fontSize + 200;
+    const x = (canvas.width - bgWidth) / 2;
+    const y = (canvas.height - bgHeight) / 2;
+    const radius = 50;
+
     context.beginPath();
     context.moveTo(x + radius, y);
     context.lineTo(x + bgWidth - radius, y);
@@ -349,45 +357,58 @@ function createNameSprite(name: string, isMe: boolean = false): THREE.Sprite {
     context.quadraticCurveTo(x, y, x + radius, y);
     context.closePath();
     context.fill();
-    
-    // Use gold/yellow text if it's the player, else white
+
+    context.strokeStyle = isMe ? 'rgba(251, 191, 36, 0.6)' : 'rgba(255, 255, 255, 0.3)';
+    context.lineWidth = 6;
+    context.stroke();
+
     context.fillStyle = isMe ? '#fbbf24' : '#ffffff';
     context.textAlign = 'center';
     context.textBaseline = 'middle';
-    // Add shadow for sharpness
-    context.shadowColor = 'rgba(0, 0, 0, 0.9)';
-    context.shadowBlur = 6;
+    context.shadowColor = 'rgba(0, 0, 0, 1)';
+    context.shadowBlur = 10;
     context.shadowOffsetX = 0;
-    context.shadowOffsetY = 3;
-    context.fillText(name, 768, 180);
+    context.shadowOffsetY = 4;
+    context.fillText(name, canvas.width / 2, canvas.height / 2);
+    context.shadowBlur = 0;
+    context.shadowOffsetY = 0;
+    context.fillText(name, canvas.width / 2, canvas.height / 2);
   }
 
   const texture = new THREE.CanvasTexture(canvas);
   texture.generateMipmaps = true;
   texture.minFilter = THREE.LinearMipmapLinearFilter;
   texture.magFilter = THREE.LinearFilter;
+  texture.anisotropy = 16;
   if (typeof THREE.SRGBColorSpace !== 'undefined') {
     texture.colorSpace = THREE.SRGBColorSpace as THREE.ColorSpace;
   }
 
-  const spriteMaterial = new THREE.SpriteMaterial({ 
-    map: texture, 
+  const baseScaleX = isMe ? 36 : 30;
+  const baseScaleY = isMe ? 9 : 7.5;
+
+  const geometry = new THREE.PlaneGeometry(1, 1);
+  const material = new THREE.MeshBasicMaterial({
+    map: texture,
     transparent: true,
-    depthTest: false 
+    depthTest: false,
+    side: THREE.DoubleSide,
   });
-  const sprite = new THREE.Sprite(spriteMaterial);
-  const baseScaleX = isMe ? 28 : 24;
-  const baseScaleY = isMe ? 7 : 6;
-  sprite.scale.set(baseScaleX, baseScaleY, 1);
-  sprite.position.y = 9; // Position above the car
-  sprite.renderOrder = 999;
-  sprite.userData = { 
-    isNameSprite: true, 
+  const mesh = new THREE.Mesh(geometry, material);
+
+  // Flip X to counter the scene's rotation.y = PI, and tilt to match 60° map tilt
+  mesh.rotation.x = -MAP_TILT_RAD;
+  mesh.scale.set(-baseScaleX, baseScaleY, 1);
+
+  mesh.position.y = 12;
+  mesh.renderOrder = 999;
+  mesh.userData = {
+    isNameSprite: true,
     playerName: name,
     baseScale: { x: baseScaleX, y: baseScaleY, z: 1 },
-    baseY: 9
+    baseY: 12,
   };
-  return sprite;
+  return mesh;
 }
 
 function disposeCarMesh(mesh: THREE.Group) {
@@ -402,60 +423,62 @@ function disposeCarMesh(mesh: THREE.Group) {
           m.material.dispose();
         }
       }
-    } else if ((child as THREE.Sprite).isSprite) {
-      const s = child as THREE.Sprite;
-      if (s.material) {
-        if (s.material.map) s.material.map.dispose();
-        s.material.dispose();
-      }
+    } else if (child.userData.isNameSprite && (child as THREE.Mesh).isMesh) {
+      const m = child as THREE.Mesh;
+      const mat = m.material as THREE.MeshBasicMaterial;
+      if (mat.map) mat.map.dispose();
+      mat.dispose();
+      m.geometry.dispose();
     }
   });
 }
 
 function updateNameSprite(group: THREE.Group, name?: string, isMe: boolean = false) {
-  let existingSprite: THREE.Sprite | null = null;
-  
-  // Find existing sprite
+  let existing: THREE.Mesh | null = null;
+
+  // Find existing label
   group.children.forEach(child => {
     if (child.userData.isNameSprite) {
-      existingSprite = child as THREE.Sprite;
+      existing = child as THREE.Mesh;
     }
   });
 
   // If name hasn't changed, do nothing
-  if (existingSprite && existingSprite.userData.playerName === name) {
+  if (existing && existing.userData.playerName === name) {
     return;
   }
 
-  // Remove and dispose old sprite
-  if (existingSprite) {
-    group.remove(existingSprite);
-    if (existingSprite.material.map) existingSprite.material.map.dispose();
-    existingSprite.material.dispose();
+  // Remove and dispose old label
+  if (existing) {
+    group.remove(existing);
+    const mat = (existing as THREE.Mesh).material as THREE.MeshBasicMaterial;
+    if (mat.map) mat.map.dispose();
+    mat.dispose();
+    (existing as THREE.Mesh).geometry.dispose();
   }
 
-  // Add new sprite if name exists
+  // Add new label if name exists
   if (name) {
-    const sprite = createNameSprite(name, isMe);
-    group.add(sprite);
+    const label = createNameLabel(name, isMe);
+    group.add(label);
   }
 }
 
 function createCarMesh(type: string, colorHex: string, playerName?: string, isMe: boolean = false) {
   const group = new THREE.Group();
   const color = new THREE.Color(colorHex || '#ff0000');
-  
+
   // Store metadata to detect changes
   group.userData = { carType: type, carColor: colorHex, playerName };
 
   // Load the model based on the type
   const modelUrl = `/models/${type}.glb`;
-  
+
   gltfLoader.load(
     modelUrl,
     (gltf) => {
       const model = gltf.scene;
-      
+
       // Apply the color to the car body material
       model.traverse((child) => {
         if ((child as THREE.Mesh).isMesh) {
@@ -543,7 +566,7 @@ function createFallbackCar(group: THREE.Group, type: string, color: THREE.Color)
     wheelZ = 1.2;
     wheelX = 1.0;
   }
-  
+
   // Chassis
   const geometry = new THREE.BoxGeometry(width, height, length);
   const material = new THREE.MeshStandardMaterial({ color });
@@ -554,7 +577,7 @@ function createFallbackCar(group: THREE.Group, type: string, color: THREE.Color)
   // Wheels
   const wheelGeo = new THREE.CylinderGeometry(wheelRadius, wheelRadius, wheelWidth, 16);
   const wheelMat = new THREE.MeshStandardMaterial({ color: 0x333333 });
-  
+
   const positions = [
     { pos: [-wheelX, wheelRadius, wheelZ], isFront: true },
     { pos: [wheelX, wheelRadius, wheelZ], isFront: true },
@@ -567,17 +590,17 @@ function createFallbackCar(group: THREE.Group, type: string, color: THREE.Color)
   positions.forEach(({ pos, isFront }) => {
     const wheelGroup = new THREE.Group();
     wheelGroup.position.set(pos[0], pos[1], pos[2]);
-    
+
     const wheel = new THREE.Mesh(wheelGeo, wheelMat);
     wheel.rotation.z = Math.PI / 2;
     wheelGroup.add(wheel);
-    
+
     group.add(wheelGroup);
-    
+
     if (isFront) {
       frontWheels.push(wheelGroup);
     }
   });
-  
+
   group.userData.frontWheels = frontWheels;
 }

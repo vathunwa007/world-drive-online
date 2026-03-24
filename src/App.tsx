@@ -3,6 +3,7 @@ import { Map3D } from './components/Map3D';
 import { Speedometer } from './components/Speedometer';
 import { CarPhysics } from './lib/physics';
 import { WebRTCManager, PeerData, ChatMessage } from './lib/webrtc';
+import { RoomLobby } from './components/RoomLobby';
 import { Car, Users, MessageSquare, Send, Check } from 'lucide-react';
 
 const GOOGLE_MAPS_API_KEY = import.meta.env.VITE_GOOGLE_MAPS_API_KEY || '';
@@ -43,6 +44,8 @@ export default function App() {
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
   const [chatInput, setChatInput] = useState('');
   const [showChat, setShowChat] = useState(false);
+  const showChatRef = useRef(false);
+  const [unreadCount, setUnreadCount] = useState(0);
   const [selectedCarType, setSelectedCarType] = useState(CAR_MODELS[0].id);
   const [selectedCarColor, setSelectedCarColor] = useState(CAR_COLORS[0].id);
   const [playerName, setPlayerName] = useState('Player' + Math.floor(Math.random() * 1000));
@@ -103,6 +106,9 @@ export default function App() {
 
     webrtc.onChatMessage = (msg) => {
       setChatMessages(prev => [...prev.slice(-49), msg]);
+      if (!showChatRef.current) {
+        setUnreadCount(prev => prev + 1);
+      }
     };
 
     webrtc.connect(roomId);
@@ -208,7 +214,7 @@ export default function App() {
   if (!inGame) {
     return (
       <div className="min-h-screen bg-slate-900 flex items-center justify-center p-4 text-slate-100 font-sans">
-        <div className="max-w-md w-full bg-slate-800 rounded-2xl shadow-2xl overflow-hidden border border-slate-700">
+        <div className="max-w-lg w-full bg-slate-800 rounded-2xl shadow-2xl overflow-hidden border border-slate-700">
           <div className="p-8">
             <div className="flex items-center justify-center mb-8">
               <div className="bg-blue-500 p-3 rounded-xl shadow-lg shadow-blue-500/30">
@@ -217,6 +223,14 @@ export default function App() {
             </div>
             <h1 className="text-3xl font-bold text-center mb-2">World Drive</h1>
             <p className="text-slate-400 text-center mb-8">Multiplayer driving on real-world maps</p>
+
+            <RoomLobby onJoinRoom={(id) => setRoomId(id)} />
+
+            <div className="my-4 flex items-center gap-3">
+              <div className="flex-1 h-px bg-slate-700" />
+              <span className="text-xs text-slate-500 uppercase">or create a room</span>
+              <div className="flex-1 h-px bg-slate-700" />
+            </div>
 
             {error && (
               <div className="bg-red-500/10 border border-red-500/50 text-red-400 p-3 rounded-lg mb-6 text-sm">
@@ -380,15 +394,15 @@ export default function App() {
       {/* Chat UI */}
       <div className={`absolute bottom-4 left-4 w-80 bg-slate-900/80 backdrop-blur-md border border-slate-700/50 rounded-xl shadow-2xl flex flex-col transition-all duration-300 ${showChat ? 'h-96' : 'h-12'}`}>
         <button 
-          onClick={() => setShowChat(!showChat)}
+          onClick={() => { const next = !showChat; setShowChat(next); showChatRef.current = next; if (next) setUnreadCount(0); }}
           className="flex items-center justify-between p-3 text-white hover:bg-slate-800/50 rounded-t-xl transition-colors"
         >
           <span className="flex items-center gap-2 font-medium">
             <MessageSquare className="w-4 h-4 text-blue-400" />
             Chat
           </span>
-          {chatMessages.length > 0 && !showChat && (
-            <span className="bg-blue-500 text-xs px-2 py-0.5 rounded-full">New</span>
+          {unreadCount > 0 && !showChat && (
+            <span className="bg-blue-500 text-xs px-2 py-0.5 rounded-full">{unreadCount}</span>
           )}
         </button>
         

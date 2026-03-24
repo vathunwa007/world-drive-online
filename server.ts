@@ -3,6 +3,7 @@ import { WebSocketServer, WebSocket } from 'ws';
 import { createServer as createViteServer } from 'vite';
 import http from 'http';
 import path from 'path';
+import fs from 'fs';
 
 async function startServer() {
   const app = express();
@@ -104,13 +105,34 @@ async function startServer() {
     });
   });
 
+  // REST API: list active rooms
+  app.get('/api/rooms', (req, res) => {
+    const result = Array.from(rooms.entries()).map(([id, members]) => ({
+      id,
+      playerCount: members.size,
+    }));
+    res.json(result);
+  });
+
   // Vite middleware for development
   if (process.env.NODE_ENV !== "production") {
     const vite = await createViteServer({
       server: { middlewareMode: true },
-      appType: "spa",
+      appType: "custom",
     });
+    // Use Vite's connect middleware but handle SPA fallback manually (skip /api routes)
     app.use(vite.middlewares);
+    app.use('*', async (_req, res, next) => {
+      try {
+        if (_req.originalUrl.startsWith('/api')) return next();
+        const html = fs.readFileSync(path.join(process.cwd(), 'index.html'), 'utf-8');
+        const transformed = await vite.transformIndexHtml(_req.originalUrl, html);
+        res.status(200).set({ 'Content-Type': 'text/html' }).end(transformed);
+      } catch (e) {
+        vite.ssrFixStacktrace(e as Error);
+        next(e);
+      }
+    });
   } else {
     const distPath = path.join(process.cwd(), 'dist');
     app.use(express.static(distPath));
