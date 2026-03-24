@@ -20,12 +20,17 @@ export type ChatMessage = {
   timestamp: number;
 };
 
+export type SignalingMode = 'self-hosted' | 'piesocket';
+
 export class WebRTCManager {
   private ws: WebSocket | null = null;
   private peers: Map<string, RTCPeerConnection> = new Map();
   private dataChannels: Map<string, RTCDataChannel> = new Map();
   public myId: string = '';
   public roomId: string = '';
+  private mode: SignalingMode;
+  private signalingUrl: string;
+  private heartbeatInterval: ReturnType<typeof setInterval> | null = null;
 
   public onPeerJoined?: (peerId: string) => void;
   public onPeerLeft?: (peerId: string) => void;
@@ -33,10 +38,23 @@ export class WebRTCManager {
   public onChatMessage?: (msg: ChatMessage) => void;
   public onConnected?: () => void;
 
-  constructor(private signalingUrl: string) {}
+  constructor(signalingUrl: string, mode: SignalingMode = 'self-hosted') {
+    this.signalingUrl = signalingUrl;
+    this.mode = mode;
+  }
 
   public connect(roomId: string) {
     this.roomId = roomId;
+
+    if (this.mode === 'piesocket') {
+      this.myId = Math.random().toString(36).substring(2, 9);
+      this.connectPieSocket(roomId);
+    } else {
+      this.connectSelfHosted(roomId);
+    }
+  }
+
+  private connectSelfHosted(roomId: string) {
     this.ws = new WebSocket(this.signalingUrl);
 
     this.ws.onopen = () => {
@@ -50,7 +68,6 @@ export class WebRTCManager {
         case 'room-joined':
           this.myId = data.id;
           if (this.onConnected) this.onConnected();
-          // Create connections to existing peers
           for (const peerId of data.peerIds) {
             if (this.onPeerJoined) this.onPeerJoined(peerId);
             await this.createPeerConnection(peerId, true);
@@ -58,7 +75,6 @@ export class WebRTCManager {
           break;
 
         case 'peer-joined':
-          // A new peer joined, they will initiate the connection
           if (this.onPeerJoined) this.onPeerJoined(data.peerId);
           await this.createPeerConnection(data.peerId, false);
           break;
@@ -75,7 +91,118 @@ export class WebRTCManager {
     };
   }
 
+  private connectPieSocket(roomId: string) {
+    // PieSocket broadcasts all messages to everyone in the channel.
+    // We use the room ID as the channel name.
+    this.ws = new WebSocket(this.signalingUrl);
+
+    this.ws.onopen = () => {
+      // Announce ourselves to the channel
+      this.broadcast({
+        type: 'peer-announce',
+        senderId: this.myId,
+        roomId,
+      });
+      if (this.onConnected) this.onConnected();
+
+      // Periodically send heartbeat so new joiners discover us
+      this.heartbeatInterval = setInterval(() => {
+        this.broadcast({
+          type: 'peer-heartbeat',
+          senderId: this.myId,
+        });
+      }, 10000);
+    };
+
+    this.ws.onmessage = async (event) => {
+      let data: any;
+      try {
+        data = JSON.parse(event.data);
+      } catch {
+        return;
+      }
+
+      // PieSocket may wrap messages in a system envelope
+      if (data.event === 'system' || data.sender === 'system') return;
+      // If PieSocket wraps the payload in a `data` field, unwrap it
+      if (data.event && data.data) {
+        try {
+          data = typeof data.data === 'string' ? JSON.parse(data.data) : data.data;
+        } catch {
+          return;
+        }
+      }
+
+      // Ignore our own messages
+      if (data.senderId === this.myId) return;
+
+      switch (data.type) {
+        case 'peer-announce': {
+          // A peer announced itself — if we don't know them yet, connect
+          if (!this.peers.has(data.senderId)) {
+            if (this.onPeerJoined) this.onPeerJoined(data.senderId);
+            // The one with the "higher" ID initiates to avoid duplicate connections
+            const isInitiator = this.myId > data.senderId;
+            await this.createPeerConnection(data.senderId, isInitiator);
+            // Respond so they know about us too
+            this.broadcast({
+              type: 'peer-announce',
+              senderId: this.myId,
+              roomId: this.roomId,
+            });
+          }
+          break;
+        }
+
+        case 'peer-heartbeat': {
+          if (!this.peers.has(data.senderId)) {
+            if (this.onPeerJoined) this.onPeerJoined(data.senderId);
+            const isInitiator = this.myId > data.senderId;
+            await this.createPeerConnection(data.senderId, isInitiator);
+          }
+          break;
+        }
+
+        case 'peer-left': {
+          this.removePeer(data.senderId);
+          if (this.onPeerLeft) this.onPeerLeft(data.senderId);
+          break;
+        }
+
+        case 'signal': {
+          // Only process signals addressed to us
+          if (data.targetId !== this.myId) break;
+          await this.handleSignal(data.senderId, data.signal);
+          break;
+        }
+      }
+    };
+
+    this.ws.onclose = () => {
+      if (this.heartbeatInterval) {
+        clearInterval(this.heartbeatInterval);
+        this.heartbeatInterval = null;
+      }
+    };
+  }
+
+  private broadcast(data: any) {
+    if (this.ws && this.ws.readyState === WebSocket.OPEN) {
+      this.ws.send(JSON.stringify(data));
+    }
+  }
+
   public disconnect() {
+    // Notify peers before leaving (PieSocket mode)
+    if (this.mode === 'piesocket' && this.myId) {
+      this.broadcast({ type: 'peer-left', senderId: this.myId });
+    }
+
+    if (this.heartbeatInterval) {
+      clearInterval(this.heartbeatInterval);
+      this.heartbeatInterval = null;
+    }
+
     if (this.ws) {
       this.ws.close();
       this.ws = null;
@@ -142,12 +269,23 @@ export class WebRTCManager {
   }
 
   private sendSignal(targetId: string, signal: any) {
-    if (this.ws && this.ws.readyState === WebSocket.OPEN) {
-      this.ws.send(JSON.stringify({
+    if (this.mode === 'piesocket') {
+      // PieSocket: broadcast with targetId so recipient can filter
+      this.broadcast({
         type: 'signal',
+        senderId: this.myId,
         targetId,
-        signal
-      }));
+        signal,
+      });
+    } else {
+      // Self-hosted: server routes to the target
+      if (this.ws && this.ws.readyState === WebSocket.OPEN) {
+        this.ws.send(JSON.stringify({
+          type: 'signal',
+          targetId,
+          signal
+        }));
+      }
     }
   }
 
@@ -169,7 +307,7 @@ export class WebRTCManager {
       type: 'sync',
       payload: { ...data, id: this.myId }
     });
-    
+
     for (const dc of this.dataChannels.values()) {
       if (dc.readyState === 'open') {
         dc.send(payload);
@@ -185,7 +323,7 @@ export class WebRTCManager {
       text,
       timestamp: Date.now()
     };
-    
+
     const payload = JSON.stringify({
       type: 'chat',
       payload: msg
@@ -196,7 +334,7 @@ export class WebRTCManager {
         dc.send(payload);
       }
     }
-    
+
     if (this.onChatMessage) {
       this.onChatMessage(msg);
     }

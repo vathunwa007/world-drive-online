@@ -2,12 +2,14 @@ import React, { useEffect, useRef, useState } from "react";
 import { Map3D } from "./components/Map3D";
 import { Speedometer } from "./components/Speedometer";
 import { CarPhysics } from "./lib/physics";
-import { WebRTCManager, PeerData, ChatMessage } from "./lib/webrtc";
+import { WebRTCManager, PeerData, ChatMessage, SignalingMode } from "./lib/webrtc";
 import { RoomLobby } from "./components/RoomLobby";
 import { Car, Users, MessageSquare, Send, Check } from "lucide-react";
 
 const GOOGLE_MAPS_API_KEY = import.meta.env.VITE_GOOGLE_MAPS_API_KEY || "";
 const GOOGLE_MAPS_MAP_ID = import.meta.env.VITE_GOOGLE_MAPS_MAP_ID || "";
+const PIESOCKET_API_KEY = import.meta.env.VITE_PIESOCKET_API_KEY || "";
+const PIESOCKET_CLUSTER_ID = import.meta.env.VITE_PIESOCKET_CLUSTER_ID || "";
 
 // Default starting location (Bangkok, Thailand)
 const START_LAT = 13.7563;
@@ -88,6 +90,7 @@ export default function App() {
   }, []);
 
   const isStaticHost = !window.location.hostname.includes('localhost') && !window.location.hostname.includes('127.0.0.1');
+  const hasPieSocket = !!(PIESOCKET_API_KEY && PIESOCKET_CLUSTER_ID);
 
   const startGame = () => {
     if (!apiKey || !roomId) {
@@ -96,12 +99,23 @@ export default function App() {
     }
     setError("");
 
-    // Initialize WebRTC (skip on static hosts like GitHub Pages)
-    if (!isStaticHost) {
-      const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
-      const wsUrl = `${protocol}//${window.location.host}`;
+    // Initialize WebRTC
+    // Use PieSocket if configured, otherwise use self-hosted (skip on static hosts without PieSocket)
+    const canConnect = hasPieSocket || !isStaticHost;
+    if (canConnect) {
+      let wsUrl: string;
+      let mode: SignalingMode;
 
-      const webrtc = new WebRTCManager(wsUrl);
+      if (hasPieSocket) {
+        wsUrl = `wss://${PIESOCKET_CLUSTER_ID}.piesocket.com/v3/${encodeURIComponent(roomId)}?api_key=${PIESOCKET_API_KEY}&notify_self=1`;
+        mode = 'piesocket';
+      } else {
+        const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
+        wsUrl = `${protocol}//${window.location.host}`;
+        mode = 'self-hosted';
+      }
+
+      const webrtc = new WebRTCManager(wsUrl, mode);
       webrtcRef.current = webrtc;
 
       webrtc.onPeerData = (peerId, data) => {
