@@ -1,8 +1,10 @@
 import React, { useEffect, useState, useRef } from 'react';
-import { Users, RefreshCw, DoorOpen, Gamepad2, Wifi } from 'lucide-react';
+import { Users, RefreshCw, DoorOpen, Gamepad2, Wifi, Server } from 'lucide-react';
 
 const PIESOCKET_API_KEY = import.meta.env.VITE_PIESOCKET_API_KEY || '';
 const PIESOCKET_CLUSTER_ID = import.meta.env.VITE_PIESOCKET_CLUSTER_ID || '';
+const SERVER_URL = import.meta.env.VITE_SERVER_URL || '';
+const SERVER_API_KEY = import.meta.env.VITE_SERVER_API_KEY || '';
 
 type RoomInfo = {
   id: string;
@@ -21,9 +23,11 @@ export function RoomLobby({ onJoinRoom }: RoomLobbyProps) {
   const [rooms, setRooms] = useState<RoomInfo[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [connected, setConnected] = useState(false);
 
   const isStaticHost = !window.location.hostname.includes('localhost') && !window.location.hostname.includes('127.0.0.1');
   const hasPieSocket = !!(PIESOCKET_API_KEY && PIESOCKET_CLUSTER_ID);
+  const hasRemoteServer = !!(SERVER_URL);
 
   // Track individual players: { playerId: { roomId, lastSeen } }
   const playersRef = useRef<Map<string, { roomId: string; lastSeen: number }>>(new Map());
@@ -50,9 +54,77 @@ export function RoomLobby({ onJoinRoom }: RoomLobbyProps) {
     setLoading(false);
   };
 
-  // PieSocket lobby: connect to the __lobby__ channel to discover rooms
+  // Remote server mode: fetch rooms via WebSocket (avoids CORS issues with HTTP)
   useEffect(() => {
-    if (!hasPieSocket) return;
+    if (!hasRemoteServer) return;
+
+    const serverOrigin = SERVER_URL.replace(/\/$/, '');
+    const wsProtocol = serverOrigin.startsWith('https') ? 'wss:' : 'ws:';
+    const wsHost = serverOrigin.replace(/^https?:\/\//, '');
+    const apiKeyParam = SERVER_API_KEY ? `?apiKey=${encodeURIComponent(SERVER_API_KEY)}` : '';
+    const wsUrl = `${wsProtocol}//${wsHost}${apiKeyParam}`;
+
+    const ws = new WebSocket(wsUrl);
+    lobbyWsRef.current = ws;
+
+    ws.onopen = () => {
+      setLoading(false);
+      setConnected(true);
+      // Request room list from server (requires list-rooms support on server)
+      ws.send(JSON.stringify({ type: 'list-rooms' }));
+    };
+
+    ws.onmessage = (event) => {
+      let data: any;
+      try {
+        data = JSON.parse(event.data);
+      } catch {
+        return;
+      }
+
+      // Handle room list response from server
+      if (data.type === 'room-list' && Array.isArray(data.rooms)) {
+        const roomList: RoomInfo[] = data.rooms.map((r: any) => ({
+          id: r.id,
+          playerCount: r.playerCount,
+        }));
+        setRooms(roomList);
+        setLoading(false);
+      }
+    };
+
+    ws.onerror = () => {
+      setError('Could not connect to server');
+      setLoading(false);
+      setConnected(false);
+    };
+
+    ws.onclose = (event) => {
+      setConnected(false);
+      // Server rejected the API key
+      if (event.code === 4001) {
+        setError('Server rejected API key — check VITE_SERVER_API_KEY');
+      }
+    };
+
+    // Periodically request updated room list
+    const interval = setInterval(() => {
+      if (ws.readyState === WebSocket.OPEN) {
+        ws.send(JSON.stringify({ type: 'list-rooms' }));
+      }
+    }, 5000);
+
+    return () => {
+      clearInterval(interval);
+      ws.close();
+      lobbyWsRef.current = null;
+    };
+  }, []);
+
+  // PieSocket lobby: connect to the __lobby__ channel to discover rooms
+  // Only used when remote server is NOT configured
+  useEffect(() => {
+    if (hasRemoteServer || !hasPieSocket) return;
 
     const wsUrl = `wss://${PIESOCKET_CLUSTER_ID}.piesocket.com/v3/${encodeURIComponent(LOBBY_CHANNEL)}?api_key=${PIESOCKET_API_KEY}`;
     const ws = new WebSocket(wsUrl);
@@ -60,6 +132,7 @@ export function RoomLobby({ onJoinRoom }: RoomLobbyProps) {
 
     ws.onopen = () => {
       setLoading(false);
+      setConnected(true);
       // Ask everyone who's online to announce themselves
       ws.send(JSON.stringify({ type: 'lobby-ping' }));
     };
@@ -99,6 +172,7 @@ export function RoomLobby({ onJoinRoom }: RoomLobbyProps) {
     ws.onerror = () => {
       setError('Could not connect to lobby');
       setLoading(false);
+      setConnected(false);
     };
 
     // Periodically clean up stale players
@@ -111,9 +185,9 @@ export function RoomLobby({ onJoinRoom }: RoomLobbyProps) {
     };
   }, []);
 
-  // Self-hosted mode: fetch /api/rooms
+  // Self-hosted local mode: fetch /api/rooms via HTTP
   const fetchRooms = async () => {
-    if (isStaticHost || hasPieSocket) {
+    if (hasRemoteServer || hasPieSocket || isStaticHost) {
       setLoading(false);
       return;
     }
@@ -132,7 +206,7 @@ export function RoomLobby({ onJoinRoom }: RoomLobbyProps) {
   };
 
   useEffect(() => {
-    if (hasPieSocket || isStaticHost) return;
+    if (hasRemoteServer || hasPieSocket || isStaticHost) return;
     fetchRooms();
     const interval = setInterval(fetchRooms, 5000);
     return () => clearInterval(interval);
@@ -140,19 +214,23 @@ export function RoomLobby({ onJoinRoom }: RoomLobbyProps) {
 
   const totalPlayers = rooms.reduce((sum, r) => sum + r.playerCount, 0);
 
+  const modeIcon = hasRemoteServer ? (
+    <Server className="w-5 h-5 text-blue-400" />
+  ) : hasPieSocket ? (
+    <Wifi className="w-5 h-5 text-emerald-400" />
+  ) : (
+    <Gamepad2 className="w-5 h-5 text-blue-400" />
+  );
+
   return (
     <div className="w-full max-w-lg">
       <div className="flex items-center justify-between mb-4">
         <h2 className="text-xl font-bold text-white flex items-center gap-2">
-          {hasPieSocket ? (
-            <Wifi className="w-5 h-5 text-emerald-400" />
-          ) : (
-            <Gamepad2 className="w-5 h-5 text-blue-400" />
-          )}
+          {modeIcon}
           Active Rooms
         </h2>
         <div className="flex items-center gap-3">
-          {hasPieSocket && (
+          {(hasRemoteServer || hasPieSocket) && connected && (
             <span className="text-xs bg-emerald-500/20 text-emerald-400 px-2 py-0.5 rounded-full">
               Online
             </span>
@@ -161,7 +239,7 @@ export function RoomLobby({ onJoinRoom }: RoomLobbyProps) {
             <Users className="w-4 h-4" />
             {totalPlayers} online
           </span>
-          {!hasPieSocket && (
+          {!hasRemoteServer && !hasPieSocket && (
             <button
               onClick={fetchRooms}
               disabled={loading}

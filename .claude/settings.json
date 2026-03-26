@@ -1,0 +1,10 @@
+{
+  "permissions": {
+    "allow": [
+      "WebFetch(domain:socket.successo-studio.com)",
+      "Bash(curl -s -w \"\\\\nHTTP_STATUS:%{http_code}\" -H \"x-api-key: your-secret-api-key-here\" https://socket.successo-studio.com/api/rooms)",
+      "Bash(curl -s -w \"\\\\nHTTP_STATUS:%{http_code}\" \"https://socket.successo-studio.com/api/rooms?apiKey=your-secret-api-key-here\")",
+      "Bash(curl -s -w \"\\\\nHTTP_STATUS:%{http_code}\" -H \"Upgrade: websocket\" -H \"Connection: Upgrade\" -H \"x-api-key: your-secret-api-key-here\" \"https://socket.successo-studio.com/\")"
+    ]
+  }
+}

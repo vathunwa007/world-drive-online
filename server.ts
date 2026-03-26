@@ -58,6 +58,15 @@ async function startServer() {
             room.add(ws);
             break;
           }
+          case 'list-rooms': {
+            // Return list of active rooms with player counts
+            const roomList = Array.from(rooms.entries()).map(([id, members]) => ({
+              id,
+              playerCount: members.size,
+            }));
+            ws.send(JSON.stringify({ type: 'room-list', rooms: roomList }));
+            break;
+          }
           case 'signal': {
             // Relay signal to specific peer
             const room = rooms.get(client.roomId!);

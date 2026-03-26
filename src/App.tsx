@@ -10,6 +10,8 @@ const GOOGLE_MAPS_API_KEY = import.meta.env.VITE_GOOGLE_MAPS_API_KEY || "";
 const GOOGLE_MAPS_MAP_ID = import.meta.env.VITE_GOOGLE_MAPS_MAP_ID || "";
 const PIESOCKET_API_KEY = import.meta.env.VITE_PIESOCKET_API_KEY || "";
 const PIESOCKET_CLUSTER_ID = import.meta.env.VITE_PIESOCKET_CLUSTER_ID || "";
+const SERVER_URL = import.meta.env.VITE_SERVER_URL || "";
+const SERVER_API_KEY = import.meta.env.VITE_SERVER_API_KEY || "";
 const TURN_URL = import.meta.env.VITE_TURN_URL || "";
 const TURN_USERNAME = import.meta.env.VITE_TURN_USERNAME || "";
 const TURN_CREDENTIAL = import.meta.env.VITE_TURN_CREDENTIAL || "";
@@ -95,6 +97,7 @@ export default function App() {
 
   const isStaticHost = !window.location.hostname.includes('localhost') && !window.location.hostname.includes('127.0.0.1');
   const hasPieSocket = !!(PIESOCKET_API_KEY && PIESOCKET_CLUSTER_ID);
+  const hasRemoteServer = !!(SERVER_URL);
 
   const startGame = () => {
     if (!apiKey || !roomId) {
@@ -104,15 +107,23 @@ export default function App() {
     setError("");
 
     // Initialize WebRTC
-    // Use PieSocket if configured, otherwise use self-hosted (skip on static hosts without PieSocket)
-    const canConnect = hasPieSocket || !isStaticHost;
+    // Use remote server > PieSocket > local self-hosted (skip on static hosts without either)
+    const canConnect = hasRemoteServer || hasPieSocket || !isStaticHost;
     if (canConnect) {
       let wsUrl: string;
       let mode: SignalingMode;
 
       let pieSocketBase: string | undefined;
 
-      if (hasPieSocket) {
+      if (hasRemoteServer) {
+        // Connect to remote signaling server via WebSocket
+        const serverOrigin = SERVER_URL.replace(/\/$/, '');
+        const wsProtocol = serverOrigin.startsWith('https') ? 'wss:' : 'ws:';
+        const wsHost = serverOrigin.replace(/^https?:\/\//, '');
+        const apiKeyParam = SERVER_API_KEY ? `?apiKey=${encodeURIComponent(SERVER_API_KEY)}` : '';
+        wsUrl = `${wsProtocol}//${wsHost}${apiKeyParam}`;
+        mode = 'self-hosted';
+      } else if (hasPieSocket) {
         pieSocketBase = `wss://${PIESOCKET_CLUSTER_ID}.piesocket.com/v3/%CHANNEL%?api_key=${PIESOCKET_API_KEY}`;
         wsUrl = pieSocketBase.replace('%CHANNEL%', encodeURIComponent(roomId));
         mode = 'piesocket';
