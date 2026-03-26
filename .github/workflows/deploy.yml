@@ -34,6 +34,8 @@ jobs:
           VITE_PIESOCKET_CLUSTER_ID: ${{ secrets.VITE_PIESOCKET_CLUSTER_ID }}
           VITE_GOOGLE_MAPS_API_KEY: ${{ secrets.VITE_GOOGLE_MAPS_API_KEY }}
           VITE_GOOGLE_MAPS_MAP_ID: ${{ secrets.VITE_GOOGLE_MAPS_MAP_ID }}
+          VITE_SERVER_URL: ${{ secrets.VITE_SERVER_URL }}
+          VITE_SERVER_API_KEY: ${{ secrets.VITE_SERVER_API_KEY }}
 
       - uses: actions/upload-pages-artifact@v3
         with:
