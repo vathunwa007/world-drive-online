@@ -80,7 +80,7 @@ export const Speedometer: React.FC<SpeedometerProps> = ({ car }) => {
   }
 
   return (
-    <div className="absolute bottom-6 right-30 w-56 h-56 bg-slate-900/90 backdrop-blur-md rounded-full border-[6px] border-slate-800 shadow-[0_0_30px_rgba(0,0,0,0.5)] flex items-center justify-center overflow-hidden z-10">
+    <div className="absolute bottom-24 right-2 w-28 h-28 sm:bottom-6 sm:right-30 sm:w-56 sm:h-56 bg-slate-900/90 backdrop-blur-md rounded-full border-[3px] sm:border-[6px] border-slate-800 shadow-[0_0_30px_rgba(0,0,0,0.5)] flex items-center justify-center overflow-hidden z-10">
       {/* Inner glow */}
       <div className="absolute inset-0 rounded-full shadow-[inset_0_0_20px_rgba(59,130,246,0.15)] pointer-events-none"></div>
 

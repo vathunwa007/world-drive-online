@@ -1,6 +1,8 @@
 import React, { useEffect, useRef, useState } from "react";
 import { Map3D } from "./components/Map3D";
 import { Speedometer } from "./components/Speedometer";
+import { SteeringWheel } from "./components/SteeringWheel";
+import { MobileControls } from "./components/MobileControls";
 import { CarPhysics } from "./lib/physics";
 import { WebRTCManager, PeerData, ChatMessage, SignalingMode, TurnConfig } from "./lib/webrtc";
 import { RoomLobby } from "./components/RoomLobby";
@@ -63,6 +65,11 @@ export default function App() {
   const webrtcRef = useRef<WebRTCManager | null>(null);
   const keysRef = useRef<{ [key: string]: boolean }>({});
   const animationFrameRef = useRef<number>(0);
+
+  const [isMobile] = useState(() =>
+    /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) ||
+    ('ontouchstart' in window && window.innerWidth < 1024)
+  );
 
   const audioCtxRef = useRef<AudioContext | null>(null);
   const engineOscRef = useRef<OscillatorNode | null>(null);
@@ -294,9 +301,9 @@ export default function App() {
 
   if (!inGame) {
     return (
-      <div className="min-h-screen bg-slate-900 flex items-center justify-center p-4 text-slate-100 font-sans">
-        <div className="max-w-lg w-full bg-slate-800 rounded-2xl shadow-2xl overflow-hidden border border-slate-700">
-          <div className="p-8">
+      <div className="min-h-screen bg-slate-900 flex items-center justify-center p-3 sm:p-4 text-slate-100 font-sans">
+        <div className="max-w-lg w-full bg-slate-800 rounded-2xl shadow-2xl overflow-hidden border border-slate-700 max-h-dvh overflow-y-auto">
+          <div className="p-4 sm:p-8">
             <div className="flex items-center justify-center mb-8">
               <div className="bg-blue-500 p-3 rounded-xl shadow-lg shadow-blue-500/30">
                 <Car className="w-8 h-8 text-white" />
@@ -457,54 +464,72 @@ export default function App() {
       />
 
       {/* HUD */}
-      <div className="absolute top-4 left-4 bg-slate-900/80 backdrop-blur-md border border-slate-700/50 p-4 rounded-xl shadow-2xl text-white">
-        <h2 className="font-bold text-lg mb-1 flex items-center gap-2">
-          <Car className="w-5 h-5 text-blue-400" />
-          World Drive
+      <div className="absolute top-2 left-2 sm:top-4 sm:left-4 bg-slate-900/80 backdrop-blur-md border border-slate-700/50 p-2 sm:p-4 rounded-xl shadow-2xl text-white max-w-[45vw] sm:max-w-none">
+        <h2 className="font-bold text-sm sm:text-lg mb-0.5 sm:mb-1 flex items-center gap-1.5 sm:gap-2">
+          <Car className="w-4 h-4 sm:w-5 sm:h-5 text-blue-400" />
+          <span className="hidden sm:inline">World Drive</span>
+          <span className="sm:hidden">WD</span>
         </h2>
-        <div className="text-sm text-slate-300 space-y-1">
+        <div className="text-xs sm:text-sm text-slate-300 space-y-0.5 sm:space-y-1">
           <p>
             Room: <span className="text-white font-mono">{roomId}</span>
           </p>
           <p className="flex items-center gap-1">
-            <Users className="w-4 h-4" />
+            <Users className="w-3 h-3 sm:w-4 sm:h-4" />
             {peerCount + 1} Player{peerCount !== 0 ? "s" : ""}
           </p>
           <p className={`font-semibold ${isOnRoad ? "text-green-400" : "text-amber-400"}`}>
-            {isOnRoad ? "On Road" : "Off Road (slow)"}
+            {isOnRoad ? "On Road" : "Off Road"}
           </p>
         </div>
       </div>
 
-      <div className="absolute top-4 right-4 bg-slate-900/80 backdrop-blur-md border border-slate-700/50 p-4 rounded-xl shadow-2xl text-white text-sm">
-        <p className="font-semibold mb-2 text-slate-300">Controls</p>
-        <div className="grid grid-cols-2 gap-x-4 gap-y-2">
-          <span className="text-slate-400">Accelerate</span>
-          <span className="font-mono bg-slate-800 px-2 py-0.5 rounded text-center">
-            W / ↑
-          </span>
-          <span className="text-slate-400">Brake/Rev</span>
-          <span className="font-mono bg-slate-800 px-2 py-0.5 rounded text-center">
-            S / ↓
-          </span>
-          <span className="text-slate-400">Steer</span>
-          <span className="font-mono bg-slate-800 px-2 py-0.5 rounded text-center">
-            A D / ← →
-          </span>
+      {/* Controls panel - desktop only */}
+      {!isMobile && (
+        <div className="absolute top-4 right-4 bg-slate-900/80 backdrop-blur-md border border-slate-700/50 p-4 rounded-xl shadow-2xl text-white text-sm">
+          <p className="font-semibold mb-2 text-slate-300">Controls</p>
+          <div className="grid grid-cols-2 gap-x-4 gap-y-2">
+            <span className="text-slate-400">Accelerate</span>
+            <span className="font-mono bg-slate-800 px-2 py-0.5 rounded text-center">
+              W / ↑
+            </span>
+            <span className="text-slate-400">Brake/Rev</span>
+            <span className="font-mono bg-slate-800 px-2 py-0.5 rounded text-center">
+              S / ↓
+            </span>
+            <span className="text-slate-400">Steer</span>
+            <span className="font-mono bg-slate-800 px-2 py-0.5 rounded text-center">
+              A D / ← →
+            </span>
+          </div>
+          <button
+            onClick={stopGame}
+            className="w-full mt-4 bg-red-500/20 hover:bg-red-500/40 text-red-400 py-1.5 rounded transition-colors"
+          >
+            Leave Game
+          </button>
         </div>
+      )}
+
+      {/* Leave button - mobile only */}
+      {isMobile && (
         <button
           onClick={stopGame}
-          className="w-full mt-4 bg-red-500/20 hover:bg-red-500/40 text-red-400 py-1.5 rounded transition-colors"
+          className="absolute top-2 right-2 bg-slate-900/80 backdrop-blur-md border border-slate-700/50 px-3 py-1.5 rounded-lg text-red-400 text-xs font-medium z-20"
         >
-          Leave Game
+          Leave
         </button>
-      </div>
+      )}
 
       <Speedometer car={myCar} />
+      <SteeringWheel car={myCar} />
+
+      {/* Mobile touch controls */}
+      {isMobile && <MobileControls keysRef={keysRef} />}
 
       {/* Chat UI */}
       <div
-        className={`absolute bottom-4 left-4 w-80 bg-slate-900/80 backdrop-blur-md border border-slate-700/50 rounded-xl shadow-2xl flex flex-col transition-all duration-300 ${showChat ? "h-96" : "h-12"}`}
+        className={`absolute bottom-4 left-4 w-64 sm:w-80 bg-slate-900/80 backdrop-blur-md border border-slate-700/50 rounded-xl shadow-2xl flex flex-col transition-all duration-300 ${isMobile ? "hidden" : ""} ${showChat ? "h-96" : "h-12"}`}
       >
         <button
           onClick={() => {
